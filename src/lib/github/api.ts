@@ -105,27 +105,6 @@ async function fetchGitHubApi(url: string): Promise<any> {
   const response = await fetch(url, { headers });
   
   if (!response.ok) {
-    if (response.status === 403) {
-      const rateLimit = {
-        limit: response.headers.get('X-RateLimit-Limit'),
-        remaining: response.headers.get('X-RateLimit-Remaining'),
-        reset: response.headers.get('X-RateLimit-Reset')
-      };
-      
-      let resetTime = '';
-      if (rateLimit.reset) {
-        const resetDate = new Date(parseInt(rateLimit.reset) * 1000);
-        resetTime = resetDate.toLocaleTimeString();
-      }
-      
-      throw new Error(
-        `GitHub APIのレート制限に達しました (403)。` +
-        (token ? '個人アクセストークンを使用していますが、制限に達しました。' : 
-          '環境変数 VITE_GITHUB_TOKEN に個人アクセストークンを設定すると、より高いレート制限が利用できます。') +
-        (resetTime ? `\n制限は${resetTime}にリセットされます。` : '')
-      );
-    }
-    
     throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
   }
   
