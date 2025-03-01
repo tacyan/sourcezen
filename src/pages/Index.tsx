@@ -141,6 +141,7 @@ const Index = () => {
           if (!isLikelyBinaryFile(path)) {
             try {
               const content = await getFileContent(repoData, path, repoData.branch);
+              // エンコーディングの問題を解決するためにデコード処理は行わない
               allFiles[path] = content;
             } catch (error) {
               console.error(`Error fetching ${path}:`, error);
@@ -202,6 +203,7 @@ const Index = () => {
         filePaths.map(async (path) => {
           try {
             const content = await getFileContent(repoData, path, repoData.branch);
+            // 文字化けを防ぐために、生のコンテンツをそのまま使用
             allFiles[path] = content;
           } catch (error) {
             console.error(`Error fetching ${path}:`, error);
