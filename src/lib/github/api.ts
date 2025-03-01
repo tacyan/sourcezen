@@ -1,4 +1,3 @@
-
 /**
  * GitHub API utilities
  * 
@@ -64,6 +63,7 @@ const DEFAULT_IGNORE_PATTERNS = [
   'npm-debug.log',
   'yarn-debug.log',
   'yarn-error.log',
+  'package-lock.json',
   'coverage'
 ];
 
