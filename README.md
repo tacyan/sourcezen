@@ -1,69 +1,77 @@
-# Welcome to your Lovable project
 
-## Project info
+# GitHub Repository Explorer
 
-**URL**: https://lovable.dev/projects/cf07248d-819e-49a4-8a22-eed761f32708
+## Overview
 
-## How can I edit this code?
+This application allows you to explore GitHub repositories, view their file structure, and examine the contents of individual files. It fetches repository data using the GitHub API and presents it in a user-friendly interface.
 
-There are several ways of editing your application.
+## Features
 
-**Use Lovable**
+- **Repository Browsing**: Enter any public GitHub repository URL to explore its file structure
+- **File Tree Navigation**: Browse through the repository's directory structure with an interactive file tree
+- **File Content Viewing**: View the contents of individual files with syntax highlighting
+- **Markdown Rendering**: View markdown files with proper formatting
+- **File Filtering**: Exclude files and directories using customizable ignore patterns (similar to .gitignore)
+- **Dark Mode**: Toggle between light and dark themes for comfortable viewing
+- **Export Options**: Copy file contents to clipboard or download as markdown
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/cf07248d-819e-49a4-8a22-eed761f32708) and start prompting.
+## Ignore Patterns
 
-Changes made via Lovable will be committed automatically to this repo.
+The application comes with default ignore patterns to filter out common files and directories that aren't typically needed for code review:
 
-**Use your preferred IDE**
+- node_modules
+- .git
+- package-lock.json
+- And many other common configuration and documentation files
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+You can customize these patterns to suit your needs when exploring repositories.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Technologies Used
 
-Follow these steps:
+- React
+- TypeScript
+- Tailwind CSS
+- shadcn/ui components
+- GitHub API integration
+
+## How to Use
+
+1. Enter a GitHub repository URL in the input field
+2. Set the maximum depth for directory traversal (optional)
+3. Customize ignore patterns if needed
+4. Click "Fetch Repository" to load the repository structure
+5. Navigate through the file tree on the left panel
+6. View file contents on the right panel
+7. Use the buttons at the top of the file content panel to copy or download the file
+
+## Project Structure
+
+This project is built with Vite, TypeScript, React, shadcn-ui, and Tailwind CSS. It includes:
+
+- Components for file tree navigation and display
+- GitHub API integration for fetching repository data
+- Markdown rendering with syntax highlighting
+- Dark mode support
+- Responsive design for various screen sizes
+
+## Getting Started
+
+To run this project locally:
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Clone the repository
+git clone <REPOSITORY_URL>
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to the project directory
+cd <PROJECT_DIRECTORY>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Contributing
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with .
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/cf07248d-819e-49a4-8a22-eed761f32708) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+Contributions are welcome! Feel free to submit issues or pull requests to improve the functionality or fix bugs.
