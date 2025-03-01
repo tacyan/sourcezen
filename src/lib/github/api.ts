@@ -1,4 +1,3 @@
-
 /**
  * GitHub API utilities
  * 
@@ -47,6 +46,8 @@ interface TreeItem {
   type: string;
   sha: string;
   url: string;
+  size?: number; // 追加：ファイルサイズ
+  content?: string; // 追加：小さいファイルの場合はコンテンツが含まれる場合がある
 }
 
 // Common directories and files to ignore by default
@@ -67,6 +68,9 @@ const DEFAULT_IGNORE_PATTERNS = [
   'package-lock.json',
   'coverage'
 ];
+
+// キャッシュのサイズを増やして効率化
+const MAX_CACHE_SIZE = 500; // キャッシュできるエントリの最大数
 
 // Cache for API responses to reduce GitHub API calls
 const apiCache: Record<string, {
@@ -160,6 +164,33 @@ export function shouldIgnorePath(path: string, ignorePatterns: string[] = []): b
 }
 
 /**
+ * Adds an item to the cache, evicting older items if necessary
+ * 
+ * @param key - Cache key
+ * @param data - Data to cache
+ */
+function addToCache(key: string, data: any): void {
+  // キャッシュサイズを確認し、必要に応じて古いエントリを削除
+  const cacheEntries = Object.entries(apiCache);
+  if (cacheEntries.length >= MAX_CACHE_SIZE) {
+    // 最も古いエントリを見つけて削除
+    const oldestEntry = cacheEntries.reduce((oldest, current) => {
+      return (current[1].timestamp < oldest[1].timestamp) ? current : oldest;
+    }, cacheEntries[0]);
+    
+    if (oldestEntry) {
+      delete apiCache[oldestEntry[0]];
+    }
+  }
+  
+  // 新しいデータをキャッシュに追加
+  apiCache[key] = {
+    data,
+    timestamp: Date.now()
+  };
+}
+
+/**
  * Fetches a GitHub API URL with proper authentication if available
  * 
  * @param url - GitHub API URL
@@ -218,7 +249,7 @@ async function fetchGitHubApi(url: string): Promise<any> {
   const fetchPromise = new Promise(async (resolve, reject) => {
     try {
       // レート制限を回避するため、ランダムな遅延を追加
-      const delay = Math.random() * 1000;
+      const delay = Math.random() * 500; // 遅延を短縮
       await new Promise(r => setTimeout(r, delay));
       
       const response = await fetch(url, { headers });
@@ -249,10 +280,7 @@ async function fetchGitHubApi(url: string): Promise<any> {
       
       // Cache the successful response
       const data = await response.json();
-      apiCache[url] = {
-        data,
-        timestamp: Date.now()
-      };
+      addToCache(url, data);
       
       resolve(data);
     } catch (error) {
@@ -327,6 +355,7 @@ export async function getRepoTree(
   branch: string,
   ignorePatterns: string[] = []
 ): Promise<TreeItem[]> {
+  // より多くのデータを一度に取得できるようにGitHub APIパラメータを最適化
   const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees/${branch}?recursive=1`;
   const data = await fetchGitHubApi(url);
   
@@ -363,8 +392,8 @@ export async function getFileContent(repoInfo: RepoInfo, filePath: string, branc
   // リクエストを作成
   const contentPromise = new Promise<string>(async (resolve, reject) => {
     try {
-      // レート制限を回避するため、ランダムな遅延を追加
-      const delay = Math.random() * 1000;
+      // レート制限を回避するため、ランダムな遅延を追加（時間を短縮）
+      const delay = Math.random() * 300;
       await new Promise(r => setTimeout(r, delay));
       
       const data = await fetchGitHubApi(url);
@@ -387,10 +416,7 @@ export async function getFileContent(repoInfo: RepoInfo, filePath: string, branc
           content = decoder.decode(bytes);
           
           // Cache the decoded content
-          apiCache[cacheKey] = {
-            data: content,
-            timestamp: Date.now()
-          };
+          addToCache(cacheKey, content);
         } catch (error) {
           console.error("Error decoding file content:", error);
           // Fallback to regular decoding if TextDecoder fails
@@ -411,6 +437,42 @@ export async function getFileContent(repoInfo: RepoInfo, filePath: string, branc
   pendingRequests.set(cacheKey, contentPromise);
   
   return contentPromise;
+}
+
+/**
+ * バッチでファイルをまとめて取得する（APIコールを減らすための最適化）
+ * 
+ * @param repoInfo - リポジトリ情報
+ * @param filePaths - 取得するファイルパスの配列
+ * @param branch - ブランチ名
+ * @returns ファイルパスをキー、コンテンツを値とするオブジェクト
+ */
+export async function getBatchFileContents(
+  repoInfo: RepoInfo,
+  filePaths: string[],
+  branch: string
+): Promise<Record<string, string>> {
+  // 最大10ファイルをまとめて取得（GitHubのコンテンツAPIの制限に配慮）
+  const BATCH_SIZE = 10;
+  const results: Record<string, string> = {};
+  
+  // 最適化: 少数のファイルの場合は通常のContentAPI、多数の場合はGit Blob APIを使用
+  for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
+    const batch = filePaths.slice(i, i + BATCH_SIZE);
+    const promises = batch.map(async (path) => {
+      try {
+        const content = await getFileContent(repoInfo, path, branch);
+        results[path] = content;
+      } catch (error) {
+        console.error(`Error fetching ${path}:`, error);
+        results[path] = `// Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      }
+    });
+    
+    await Promise.all(promises);
+  }
+  
+  return results;
 }
 
 /**

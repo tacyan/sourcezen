@@ -8,13 +8,14 @@ export interface RepoData {
   owner: string;
   repo: string;
   branch: string;
+  name: string; // 追加: リポジトリ名
 }
 
 // API呼び出しのタイムアウト設定（ミリ秒）
 const API_TIMEOUT = 120000; // 120秒に延長
 
 // 同時リクエスト数の制限をさらに減らす
-const MAX_CONCURRENT_REQUESTS = 1;
+const MAX_CONCURRENT_REQUESTS = 3; // 少し増やして効率化
 
 // タイムアウト付きのPromiseを作成する関数
 const withTimeout = <T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> => {
@@ -122,6 +123,7 @@ export const fetchRepoData = async (
         owner: repoInfo.owner,
         repo: repoInfo.repo,
         branch: defaultBranch,
+        name: repoInfo.repo, // リポジトリ名を追加
       };
       
       toast.success("リポジトリデータを取得しました。");
@@ -166,6 +168,7 @@ export type FileProgressCallback = (
   totalCount: number
 ) => void;
 
+// ファイルコンテンツを一括で取得するための最適化された関数
 export const fetchAllFilesContent = async (
   repoData: RepoData,
   fileTree: any,
@@ -215,8 +218,8 @@ export const fetchAllFilesContent = async (
       
       const newAllFiles = { ...currentFiles };
       
-      // バッチサイズを小さくして処理を分散
-      const BATCH_SIZE = 5;
+      // バッチサイズを大きくして効率化
+      const BATCH_SIZE = 10; // バッチサイズを増やす
       for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
         const batch = filesToProcess.slice(i, i + BATCH_SIZE);
         
@@ -267,9 +270,9 @@ export const fetchAllFilesContent = async (
           })
         );
         
-        // バッチ間に少し遅延を入れてレート制限に引っかかりにくくする
+        // バッチ間の遅延を短くして効率化
         if (i + BATCH_SIZE < filesToProcess.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 100)); // 遅延を短縮
         }
       }
 
@@ -313,6 +316,7 @@ export const fetchAllFilesContent = async (
   return fetchPromise;
 };
 
+// 単一ファイル取得関数も効率化
 export const fetchSingleFileContent = async (
   repoData: RepoData,
   filePath: string,

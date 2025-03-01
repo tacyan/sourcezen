@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { FileText, Clipboard, Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,6 +20,7 @@ interface FileViewerProps {
   errorMessage: string;
   processedCount?: number;
   totalCount?: number;
+  repoName?: string; // 追加: リポジトリ名
 }
 
 const FileViewer: React.FC<FileViewerProps> = ({
@@ -31,6 +33,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
   errorMessage,
   processedCount = 0,
   totalCount = 0,
+  repoName = 'repository', // デフォルト値を設定
 }) => {
   const getLanguageFromPath = (path: string): string => {
     const extension = path.split('.').pop()?.toLowerCase() || '';
@@ -95,7 +98,8 @@ const FileViewer: React.FC<FileViewerProps> = ({
           return `# ${path}\n\n\`\`\`${lang}\n${fileContent}\n\`\`\`\n\n`;
         })
         .join('\n---\n\n');
-      filename = 'repository_files.md';
+      // リポジトリ名を使用してファイル名を作成
+      filename = `${repoName}_files.md`;
     }
     
     const blob = new Blob([content], { type: 'text/markdown' });
