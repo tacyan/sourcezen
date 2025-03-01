@@ -196,16 +196,17 @@ const Index = () => {
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeRaw]}
                   components={{
-                    code({ node, inline, className, children, ...props }) {
+                    code({ className, children, ...props }) {
                       const match = (className || '').match(/language-(?<lang>.*)/);
-                      return !inline && match ? (
+                      return match ? (
                         <SyntaxHighlighter
-                          children={String(children).replace(/\n$/, '')}
                           style={dracula}
                           language={match.groups?.lang}
                           PreTag="div"
                           {...props}
-                        />
+                        >
+                          {String(children).replace(/\n$/, '')}
+                        </SyntaxHighlighter>
                       ) : (
                         <code className={className} {...props}>
                           {children}
