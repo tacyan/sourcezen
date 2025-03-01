@@ -1,4 +1,3 @@
-
 /**
  * File utility functions
  * 
@@ -31,6 +30,30 @@ export interface FileNode {
 export function shouldIgnore(path: string, ignorePatterns: string[]): boolean {
   if (!ignorePatterns || ignorePatterns.length === 0) {
     return false;
+  }
+  
+  // Common problematic file extensions that should be ignored by default
+  const problematicExtensions = ['.html', '.htm', '.xml', '.svg', '.dtd'];
+  const fileExtension = path.match(/\.([^.]+)$/)?.[0] || '';
+  
+  if (problematicExtensions.includes(fileExtension)) {
+    return true;
+  }
+  
+  // Common problematic path patterns
+  const problematicPatterns = [
+    'index.html',
+    'index.htm',
+    'feed.xml',
+    'sitemap.xml',
+    '404.html',
+    'public/index.html',
+    'dist/index.html',
+    'build/index.html'
+  ];
+  
+  if (problematicPatterns.some(pattern => path.endsWith(pattern))) {
+    return true;
   }
   
   for (const pattern of ignorePatterns) {
@@ -136,6 +159,32 @@ export function buildFileTree(
 export function getFileExtension(fileName: string): string {
   const match = fileName.match(/\.([^.]+)$/);
   return match ? match[1].toLowerCase() : '';
+}
+
+/**
+ * Checks if a file is likely to be a binary file
+ * 
+ * @param fileName - File name
+ * @returns Boolean indicating if the file is likely binary
+ */
+export function isLikelyBinaryFile(fileName: string): boolean {
+  const extension = getFileExtension(fileName);
+  const binaryExtensions = [
+    // Images
+    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'ico', 'webp', 'tiff', 'tif',
+    // Audio/Video
+    'mp3', 'wav', 'ogg', 'mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv',
+    // Archives
+    'zip', 'rar', 'tar', 'gz', '7z', 'bz2', 'xz',
+    // Documents
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    // Executables and binaries
+    'exe', 'dll', 'so', 'dylib', 'bin', 'obj', 'o', 'a', 'lib', 'out', 'app',
+    // Other binary formats
+    'db', 'sqlite', 'pyc', 'class', 'jar'
+  ];
+  
+  return binaryExtensions.includes(extension);
 }
 
 /**
