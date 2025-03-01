@@ -96,7 +96,8 @@ async function fetchGitHubApi(url: string): Promise<any> {
   };
   
   // If using a GitHub token (for higher rate limits)
-  const token = process.env.GITHUB_TOKEN || '';
+  // Viteでは環境変数はimport.meta.envとして提供される
+  const token = import.meta.env.VITE_GITHUB_TOKEN || '';
   if (token) {
     headers['Authorization'] = `token ${token}`;
   }
