@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { FileText, List, RefreshCw, Sun, Moon } from 'lucide-react';
+import { FileText, List, RefreshCw, Sun, Moon, Loader2 } from 'lucide-react';
 
 interface RepoExplorerActionsProps {
   fetchAllFiles: () => void;
@@ -24,12 +24,16 @@ const RepoExplorerActions: React.FC<RepoExplorerActionsProps> = ({
       <h2 className="text-xl font-semibold">ファイル構成</h2>
       <div className="flex space-x-2">
         <button 
-          className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
+          className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors relative"
           onClick={fetchAllFiles}
           disabled={isLoadingAllFiles}
           title="すべてのファイルを読み込み"
         >
-          <List size={18} />
+          {isLoadingAllFiles ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <List size={18} />
+          )}
         </button>
         <button 
           className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
@@ -44,8 +48,9 @@ const RepoExplorerActions: React.FC<RepoExplorerActionsProps> = ({
           className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
           aria-label="Clear Cache"
           title="キャッシュをクリア"
+          disabled={isLoadingAllFiles}
         >
-          <RefreshCw size={18} />
+          <RefreshCw size={18} className={isLoadingAllFiles ? "opacity-50" : ""} />
         </button>
         <button
           onClick={toggleDarkMode}

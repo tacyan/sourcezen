@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { FileText, Clipboard, Download } from 'lucide-react';
+import { FileText, Clipboard, Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -73,8 +73,13 @@ const FileViewer: React.FC<FileViewerProps> = ({
     return (
       <div className="glass-panel p-6 text-center animate-fade-in">
         <div className="flex flex-col items-center justify-center space-y-4">
-          <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full"></div>
-          <p>ファイルを読み込み中...</p>
+          <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full">
+            <Loader2 className="h-8 w-8 text-primary animate-pulse" />
+          </div>
+          <div>
+            <p className="font-medium">ファイルを読み込み中...</p>
+            <p className="text-sm text-muted-foreground mt-1">大きなリポジトリの場合は時間がかかることがあります</p>
+          </div>
         </div>
       </div>
     );
