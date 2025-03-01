@@ -85,58 +85,61 @@
   }
 }
 
-.file-tree {
-  @apply font-mono text-sm;
-}
+@layer components {
+  /* File tree styling */
+  .file-tree {
+    @apply font-mono text-sm;
+  }
 
-.file-tree-item {
-  @apply transitions-all cursor-pointer hover:bg-secondary rounded px-2 py-1;
-}
+  .file-tree-item {
+    @apply transitions-all cursor-pointer hover:bg-secondary rounded px-2 py-1;
+  }
 
-.file-icon {
-  @apply inline-block mr-2 opacity-80;
-}
+  .file-icon {
+    @apply inline-block mr-2 opacity-80;
+  }
 
-.folder-icon {
-  @apply text-yellow-500;
-}
+  .folder-icon {
+    @apply text-yellow-500;
+  }
 
-.file-icon-code {
-  @apply text-blue-500;
-}
+  .file-icon-code {
+    @apply text-blue-500;
+  }
 
-.file-icon-image {
-  @apply text-green-500;
-}
+  .file-icon-image {
+    @apply text-green-500;
+  }
 
-.file-icon-document {
-  @apply text-purple-500;
-}
+  .file-icon-document {
+    @apply text-purple-500;
+  }
 
-.file-icon-default {
-  @apply text-gray-500;
-}
+  .file-icon-default {
+    @apply text-gray-500;
+  }
 
-/* Markdown output styling */
-.markdown-output {
-  @apply prose prose-slate max-w-none dark:prose-invert;
-}
+  /* Markdown output styling */
+  .markdown-output {
+    @apply prose prose-slate max-w-none dark:prose-invert;
+  }
 
-.markdown-output pre {
-  @apply bg-muted p-4 rounded-md overflow-x-auto;
-}
+  .markdown-output pre {
+    @apply bg-muted p-4 rounded-md overflow-x-auto;
+  }
 
-.markdown-output code {
-  @apply bg-muted px-1 py-0.5 rounded-sm;
-}
+  .markdown-output code {
+    @apply bg-muted px-1 py-0.5 rounded-sm;
+  }
 
-.markdown-output table {
-  @apply border-collapse border border-border;
-}
+  .markdown-output table {
+    @apply border-collapse border border-border;
+  }
 
-.markdown-output th,
-.markdown-output td {
-  @apply border border-border p-2;
+  .markdown-output th,
+  .markdown-output td {
+    @apply border border-border p-2;
+  }
 }
 
 /* Custom animations */
