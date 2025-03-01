@@ -5,21 +5,25 @@ import { ChevronDown, ChevronRight, Folder, FolderOpen, File } from 'lucide-reac
 
 interface FileTreeProps {
   tree: FileNode;
+  onSelect?: (filePath: string) => void;
+  selectedFile: string | null;
   maxDepth?: number;
-  onSelect?: (node: FileNode) => void;
 }
 
 const FileTreeNode = ({ 
   node, 
   depth = 0, 
-  onSelect 
+  onSelect,
+  selectedFile
 }: { 
   node: FileNode; 
   depth?: number; 
-  onSelect?: (node: FileNode) => void;
+  onSelect?: (filePath: string) => void;
+  selectedFile: string | null;
 }) => {
   const [isOpen, setIsOpen] = useState(depth < 1);
   const hasChildren = node.children && node.children.length > 0;
+  const isSelected = selectedFile === node.path;
   
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -27,8 +31,8 @@ const FileTreeNode = ({
   };
   
   const handleClick = () => {
-    if (onSelect) {
-      onSelect(node);
+    if (node.type === 'file' && onSelect && node.path) {
+      onSelect(node.path);
     }
   };
   
@@ -54,7 +58,7 @@ const FileTreeNode = ({
   return (
     <div>
       <div 
-        className={`file-tree-item flex items-center ${node.type === 'file' ? 'ml-6' : ''}`}
+        className={`file-tree-item flex items-center ${node.type === 'file' ? 'ml-6' : ''} py-1 px-2 rounded-md cursor-pointer ${isSelected ? 'bg-primary/20 text-primary' : 'hover:bg-muted'}`}
         onClick={handleClick}
       >
         {node.type === 'directory' && (
@@ -99,6 +103,7 @@ const FileTreeNode = ({
                 node={child} 
                 depth={depth + 1}
                 onSelect={onSelect}
+                selectedFile={selectedFile}
               />
             ))}
         </div>
@@ -107,12 +112,15 @@ const FileTreeNode = ({
   );
 };
 
-const FileTree = ({ tree, maxDepth = -1, onSelect }: FileTreeProps) => {
+const FileTree = ({ tree, onSelect, selectedFile, maxDepth = -1 }: FileTreeProps) => {
   return (
     <div className="file-tree glass-panel p-4 animate-fade-in">
-      <h3 className="font-semibold mb-3">ファイル構造</h3>
       <div className="text-sm">
-        <FileTreeNode node={tree} onSelect={onSelect} />
+        <FileTreeNode 
+          node={tree} 
+          onSelect={onSelect} 
+          selectedFile={selectedFile}
+        />
       </div>
     </div>
   );

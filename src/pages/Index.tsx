@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { toast } from "sonner";
 import RepoForm from "@/components/RepoForm";
@@ -5,7 +6,6 @@ import FileTree from "@/components/FileTree";
 import IgnorePatterns from "@/components/IgnorePatterns";
 import { FileNode, buildFileTree } from "@/lib/github/fileUtils";
 import { getDefaultBranch, getRepoTree, parseRepoUrl } from "@/lib/github/api";
-import { generateMarkdownDocumentation } from "@/lib/markdown/generator";
 import { getFileContent } from "@/lib/github/api";
 import { isLikelyBinaryFile } from "@/lib/github/fileUtils";
 import ReactMarkdown from 'react-markdown';
@@ -54,11 +54,21 @@ const Index = () => {
         return;
       }
       
-      const output = await generateMarkdownDocumentation(
-        filePath,
-        fileContent,
-        sourceIgnorePatterns
-      );
+      // Generate documentation markup for the file
+      // Since generateMarkdownDocumentation doesn't exist, we'll create a simple documentation
+      let output = `# ${filePath}\n\n`;
+      output += "```\n";
+      output += fileContent;
+      output += "\n```\n";
+      
+      if (sourceIgnorePatterns.length > 0) {
+        // Apply source ignore patterns if needed
+        const lines = output.split('\n');
+        const filteredLines = lines.filter(line => {
+          return !sourceIgnorePatterns.some(pattern => line.includes(pattern));
+        });
+        output = filteredLines.join('\n');
+      }
       
       setMarkdownOutput(output);
       toast.success("ドキュメントを生成しました。");
@@ -162,8 +172,8 @@ const Index = () => {
           <div className="lg:col-span-1">
             <h2 className="text-xl font-semibold mb-4">ファイル構成</h2>
             <FileTree 
-              root={fileTree} 
-              onFileSelect={handleFileSelect} 
+              tree={fileTree} 
+              onSelect={handleFileSelect} 
               selectedFile={selectedFile}
             />
             
