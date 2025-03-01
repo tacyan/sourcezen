@@ -3,23 +3,18 @@ import { toast } from "sonner";
 import RepoForm from "@/components/RepoForm";
 import FileTree from "@/components/FileTree";
 import IgnorePatterns from "@/components/IgnorePatterns";
-import { FileNode, buildFileTree } from "@/lib/github/fileUtils";
-import { getDefaultBranch, getRepoTree, parseRepoUrl, clearApiCache } from "@/lib/github/api";
-import { getFileContent } from "@/lib/github/api";
-import { isLikelyBinaryFile } from "@/lib/github/fileUtils";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { FileText, FolderTree, List, Clipboard, Download, Sun, Moon, RefreshCw } from "lucide-react";
-
-interface RepoData {
-  url: string;
-  owner: string;
-  repo: string;
-  branch: string;
-}
+import FileViewer from "@/components/FileViewer";
+import RepoErrorDisplay from "@/components/RepoErrorDisplay";
+import RepoExplorerActions from "@/components/RepoExplorerActions";
+import { FileNode } from "@/lib/github/fileUtils";
+import { 
+  fetchRepoData, 
+  fetchAllFilesContent, 
+  fetchSingleFileContent, 
+  clearCache as clearApiCache,
+  RepoData
+} from "@/services/GitHubService";
+import { Clipboard, Download, Sun, Moon, RefreshCw } from "lucide-react";
 
 interface AllFilesContent {
   [path: string]: string;
@@ -33,7 +28,7 @@ const Index = () => {
   const [markdownOutput, setMarkdownOutput] = useState<string>("");
   const [ignorePatterns, setIgnorePatterns] = useState<string[]>([]);
   const [sourceIgnorePatterns, setSourceIgnorePatterns] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
+  const [viewMode, setViewMode] = useState<'single' | 'all'>('all');
   const [allFilesContent, setAllFilesContent] = useState<AllFilesContent>({});
   const [isLoadingAllFiles, setIsLoadingAllFiles] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -57,52 +52,45 @@ const Index = () => {
       return;
     }
 
-    try {
-      console.info("Handling file select:", { filePath });
+    // Use cached content if available
+    if (allFilesContent[filePath]) {
+      console.info("Using cached file content");
       
-      // Check if we already have this file in our cache
-      if (allFilesContent[filePath]) {
-        console.info("Using cached file content");
-        
-        let output = `# ${filePath}\n\n`;
-        output += "```\n";
-        output += allFilesContent[filePath];
-        output += "\n```\n";
-        
-        if (sourceIgnorePatterns.length > 0) {
-          const lines = output.split('\n');
-          const filteredLines = lines.filter(line => {
-            return !sourceIgnorePatterns.some(pattern => line.includes(pattern));
-          });
-          output = filteredLines.join('\n');
-        }
-        
-        setMarkdownOutput(output);
-        toast.success("ファイルを読み込みました");
-        return;
+      let output = `# ${filePath}\n\n`;
+      output += "```\n";
+      output += allFilesContent[filePath];
+      output += "\n```\n";
+      
+      if (sourceIgnorePatterns.length > 0) {
+        const lines = output.split('\n');
+        const filteredLines = lines.filter(line => {
+          return !sourceIgnorePatterns.some(pattern => line.includes(pattern));
+        });
+        output = filteredLines.join('\n');
       }
       
-      // If not in cache, fetch it
-      console.info("Fetching file content from API");
-      const fileContent = await getFileContent(
-        repoData,
-        filePath,
-        repoData.branch
-      );
+      setMarkdownOutput(output);
+      return;
+    }
+
+    try {
+      const { content, error } = await fetchSingleFileContent(repoData, filePath, allFilesContent);
       
-      if (isLikelyBinaryFile(filePath)) {
-        setMarkdownOutput("<p>このファイルはバイナリファイルである可能性が高いため、プレビューできません。</p>");
+      if (error) {
+        setHasError(true);
+        setErrorMessage(error);
+        toast.error(error);
         return;
       }
       
       // Update all files content with this new file
       const newContent = { ...allFilesContent };
-      newContent[filePath] = fileContent;
+      newContent[filePath] = content;
       setAllFilesContent(newContent);
       
       let output = `# ${filePath}\n\n`;
       output += "```\n";
-      output += fileContent;
+      output += content;
       output += "\n```\n";
       
       if (sourceIgnorePatterns.length > 0) {
@@ -141,45 +129,14 @@ const Index = () => {
     setHasError(false);
     setErrorMessage("");
 
-    const getAllFilePaths = (node: FileNode): string[] => {
-      const paths: string[] = [];
-      if (node.type === 'file' && node.path) {
-        return [node.path];
-      }
-      if (node.children) {
-        for (const child of node.children) {
-          paths.push(...getAllFilePaths(child));
-        }
-      }
-      return paths;
-    };
-
-    const filePaths = getAllFilePaths(fileTree);
-    
     try {
-      const newAllFiles = { ...allFilesContent };
-      const fetchPromises = filePaths
-        .filter(path => !isLikelyBinaryFile(path) && !newAllFiles[path])
-        .map(async (path) => {
-          try {
-            const content = await getFileContent(repoData, path, repoData.branch);
-            newAllFiles[path] = content;
-          } catch (error) {
-            console.error(`Error fetching ${path}:`, error);
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            newAllFiles[path] = `// Error fetching file: ${errorMsg}`;
-          }
-        });
-
-      await Promise.all(fetchPromises);
-
-      if (Object.keys(newAllFiles).length === 0) {
+      const { allFilesContent: newAllFiles, error } = await fetchAllFilesContent(repoData, fileTree, allFilesContent);
+      
+      if (error) {
         setHasError(true);
-        setErrorMessage("ファイルを読み込めませんでした。URLを確認するか、別のリポジトリを試してください。");
-        toast.error("ファイルを読み込めませんでした。");
+        setErrorMessage(error);
       } else {
         setAllFilesContent(newAllFiles);
-        toast.success(`${Object.keys(newAllFiles).length}個のファイルを読み込みました`);
       }
     } catch (error) {
       console.error("Error fetching all files:", error);
@@ -246,64 +203,33 @@ const Index = () => {
     toast.success("マークダウンとしてダウンロードしました");
   };
 
-  const clearCache = () => {
-    clearApiCache();
-    toast.success("キャッシュをクリアしました");
-  };
-
-  const fetchRepoData = async (repoUrl: string, maxDepth: number, ignorePatterns: string[]) => {
+  const handleSubmitRepo = async (repoUrl: string, maxDepth: number, ignorePatterns: string[]) => {
     setIsLoading(true);
     setRepoData(null);
     setFileTree(null);
     setSelectedFile(null);
     setMarkdownOutput("");
     setIgnorePatterns(ignorePatterns);
-    setViewMode('single');
+    setViewMode('all');
     setAllFilesContent({});
     setHasError(false);
     setErrorMessage("");
     
     try {
-      console.info("Fetching repo data:", { repoUrl, ignorePatterns, maxDepth });
+      const { repoData: newRepoData, fileTree: newFileTree, error } = await fetchRepoData(repoUrl, maxDepth, ignorePatterns);
       
-      const repoInfo = parseRepoUrl(repoUrl);
-      if (!repoInfo) {
-        throw new Error("無効なリポジトリURLです。");
+      if (error) {
+        setHasError(true);
+        setErrorMessage(error);
+      } else if (newRepoData && newFileTree) {
+        setRepoData(newRepoData);
+        setFileTree(newFileTree);
+        
+        // Automatically fetch all files when repository is loaded
+        setTimeout(() => {
+          fetchAllFiles();
+        }, 500);
       }
-      
-      const defaultBranch = await getDefaultBranch(repoInfo);
-      
-      const tree = await getRepoTree(repoInfo, defaultBranch, ignorePatterns);
-      
-      const root = buildFileTree(tree, ignorePatterns, maxDepth);
-      
-      setRepoData({
-        url: repoUrl,
-        owner: repoInfo.owner,
-        repo: repoInfo.repo,
-        branch: defaultBranch,
-      });
-      
-      setFileTree(root);
-      
-      toast.success("リポジトリデータを取得しました。");
-      
-      // Automatically fetch all files when repository is loaded
-      setTimeout(() => {
-        fetchAllFiles();
-      }, 500);
-    } catch (error) {
-      console.error("Error fetching repo data:", error);
-      
-      let errorMessage = "リポジトリデータの取得に失敗しました。";
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      setHasError(true);
-      setErrorMessage(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -316,7 +242,7 @@ const Index = () => {
           <h1 className="text-3xl font-bold mb-6">sourcezen - GitHub リポジトリエクスプローラー</h1>
           <div className="flex items-center gap-2">
             <button
-              onClick={clearCache}
+              onClick={clearApiCache}
               className="p-2 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
               aria-label="Clear Cache"
               title="キャッシュをクリア"
@@ -333,47 +259,23 @@ const Index = () => {
           </div>
         </div>
         
-        <RepoForm onSubmit={fetchRepoData} isLoading={isLoading} />
+        <RepoForm onSubmit={handleSubmitRepo} isLoading={isLoading} />
         
         {hasError && !fileTree && (
-          <div className="mt-8 p-6 border border-destructive/50 bg-destructive/10 rounded-lg">
-            <h2 className="text-xl font-semibold text-destructive mb-2">エラーが発生しました</h2>
-            <p className="text-destructive/90">{errorMessage}</p>
-            <div className="mt-4">
-              <p className="text-sm">
-                GitHub APIのレート制限に達した場合は、GitHubの個人アクセストークンを使用すると制限を上げられます。
-                環境変数 <code className="bg-muted px-1 py-0.5 rounded">VITE_GITHUB_TOKEN</code> にトークンを設定してください。
-              </p>
-            </div>
-          </div>
+          <RepoErrorDisplay errorMessage={errorMessage} />
         )}
         
         {fileTree && (
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">ファイル構成</h2>
-                {repoData && (
-                  <div className="flex space-x-2">
-                    <button 
-                      className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
-                      onClick={fetchAllFiles}
-                      disabled={isLoadingAllFiles}
-                      title="すべてのファイルを読み込み"
-                    >
-                      <List size={18} />
-                    </button>
-                    <button 
-                      className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
-                      onClick={generateMarkdownDocument}
-                      disabled={isLoadingAllFiles}
-                      title="マークダウンドキュメントとして表示"
-                    >
-                      <FileText size={18} />
-                    </button>
-                  </div>
-                )}
-              </div>
+              <RepoExplorerActions
+                fetchAllFiles={fetchAllFiles}
+                generateMarkdownDocument={generateMarkdownDocument}
+                clearCache={clearApiCache}
+                toggleDarkMode={toggleDarkMode}
+                isDarkMode={isDarkMode}
+                isLoadingAllFiles={isLoadingAllFiles}
+              />
               
               <FileTree 
                 tree={fileTree} 
@@ -420,83 +322,15 @@ const Index = () => {
                 )}
               </div>
               
-              {isLoadingAllFiles ? (
-                <div className="glass-panel p-6 text-center animate-fade-in">
-                  <div className="flex flex-col items-center justify-center space-y-4">
-                    <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full"></div>
-                    <p>ファイルを読み込み中...</p>
-                  </div>
-                </div>
-              ) : hasError ? (
-                <div className="bg-destructive/10 border border-destructive/50 rounded-lg p-6 animate-fade-in">
-                  <div className="flex flex-col items-center justify-center space-y-4 text-destructive">
-                    <FolderTree size={48} className="opacity-70" />
-                    <p className="text-center font-medium">{errorMessage}</p>
-                    {errorMessage.includes('レート制限') && (
-                      <div className="text-sm text-center max-w-md">
-                        <p className="mb-2">GitHub APIのレート制限に達しました。以下の方法で解決できます：</p>
-                        <ol className="list-decimal text-left ml-6 space-y-1">
-                          <li>しばらく待ってから再試行する</li>
-                          <li>GitHubの個人アクセストークンを使用する（環境変数 <code className="bg-muted px-1 py-0.5 rounded">VITE_GITHUB_TOKEN</code> に設定）</li>
-                        </ol>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in overflow-auto max-h-[80vh]">
-                  {Object.keys(allFilesContent).length > 0 ? (
-                    <div className="space-y-8">
-                      {Object.entries(allFilesContent).map(([path, content]) => (
-                        <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
-                          <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-                            <FileText size={16} className="text-primary" />
-                            {path}
-                          </h3>
-                          <SyntaxHighlighter
-                            style={dracula}
-                            language={path.split('.').pop()}
-                            customStyle={{ borderRadius: '0.5rem' }}
-                          >
-                            {content}
-                          </SyntaxHighlighter>
-                        </div>
-                      ))}
-                    </div>
-                  ) : markdownOutput ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeRaw]}
-                      components={{
-                        code({ className, children, ...props }) {
-                          const match = (className || '').match(/language-(?<lang>.*)/);
-                          return match ? (
-                            <SyntaxHighlighter
-                              style={dracula}
-                              language={match.groups?.lang}
-                              PreTag="div"
-                              {...props}
-                            >
-                              {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
-                          ) : (
-                            <code className={className} {...props}>
-                              {children}
-                            </code>
-                          );
-                        }
-                      }}
-                    >
-                      {markdownOutput}
-                    </ReactMarkdown>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-                      <FolderTree size={48} className="opacity-50 mb-4" />
-                      <p>ファイルが読み込まれていません</p>
-                    </div>
-                  )}
-                </div>
-              )}
+              <FileViewer
+                viewMode={viewMode}
+                selectedFile={selectedFile}
+                markdownOutput={markdownOutput}
+                allFilesContent={allFilesContent}
+                isLoadingAllFiles={isLoadingAllFiles}
+                hasError={hasError}
+                errorMessage={errorMessage}
+              />
             </div>
           </div>
         )}
