@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import RepoForm from "@/components/RepoForm";
@@ -152,12 +153,14 @@ const Index = () => {
     }
   };
 
+  // Modified function to automatically fetch and display all files
   const generateMarkdownDocument = () => {
     if (!repoData || !fileTree) {
       toast.error("リポジトリデータがありません。");
       return;
     }
 
+    // Switch to "all" view mode and fetch all files
     fetchAllFiles();
   };
 
