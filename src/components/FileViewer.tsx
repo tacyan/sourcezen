@@ -127,6 +127,39 @@ const FileViewer: React.FC<FileViewerProps> = ({
     );
   };
 
+  // 単一ファイル表示とマークダウン表示を統一して処理
+  const renderAllFiles = () => {
+    const files = Object.entries(allFilesContent);
+    if (files.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+          <FileText size={48} className="opacity-50 mb-4" />
+          <p>ファイルが読み込まれていません</p>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="space-y-8">
+        {files.map(([path, content]) => (
+          <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
+            <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+              <FileText size={16} className="text-primary" />
+              {path}
+            </h3>
+            <SyntaxHighlighter
+              style={dracula}
+              language={getLanguageFromPath(path)}
+              customStyle={{ borderRadius: '0.5rem' }}
+            >
+              {content}
+            </SyntaxHighlighter>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   if (isLoadingAllFiles) {
     return (
       <div className="glass-panel p-6 text-center animate-fade-in">
@@ -175,39 +208,6 @@ const FileViewer: React.FC<FileViewerProps> = ({
       </div>
     );
   }
-
-  // 単一ファイル表示とマークダウン表示を統一して処理
-  const renderAllFiles = () => {
-    const files = Object.entries(allFilesContent);
-    if (files.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-          <FileText size={48} className="opacity-50 mb-4" />
-          <p>ファイルが読み込まれていません</p>
-        </div>
-      );
-    }
-    
-    return (
-      <div className="space-y-8">
-        {files.map(([path, content]) => (
-          <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
-            <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-              <FileText size={16} className="text-primary" />
-              {path}
-            </h3>
-            <SyntaxHighlighter
-              style={dracula}
-              language={getLanguageFromPath(path)}
-              customStyle={{ borderRadius: '0.5rem' }}
-            >
-              {content}
-            </SyntaxHighlighter>
-          </div>
-        ))}
-      </div>
-    );
-  };
 
   // markdownOutputまたはallFilesContentのいずれかに基づいて表示
   return (
