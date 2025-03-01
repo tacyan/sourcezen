@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import RepoForm from "@/components/RepoForm";
@@ -286,6 +285,7 @@ const Index = () => {
                 toggleDarkMode={toggleDarkMode}
                 isDarkMode={isDarkMode}
                 isLoadingAllFiles={isLoadingAllFiles}
+                fileCount={Object.keys(allFilesContent).length}
               />
               
               <FileTree 
