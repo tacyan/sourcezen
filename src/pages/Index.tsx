@@ -40,6 +40,8 @@ const Index = () => {
     setMarkdown('');
     
     try {
+      console.log('Fetching repo data:', { repoUrl, ignorePatterns, maxDepth });
+      
       const response = await fetch('/api/github', {
         method: 'POST',
         headers: {
@@ -53,16 +55,31 @@ const Index = () => {
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'リポジトリデータの取得に失敗しました');
+        let errorMessage = 'リポジトリデータの取得に失敗しました';
+        
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (parseError) {
+          // If we can't parse the JSON, use the status text
+          errorMessage = `エラー: ${response.status} ${response.statusText}`;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
+      console.log('Repo data fetched successfully:', data);
       setRepoData(data);
       
       // Automatically generate markdown after fetching repo data
-      generateMarkdown(repoUrl, data.defaultBranch);
+      if (data && data.repoInfo && data.defaultBranch) {
+        generateMarkdown(repoUrl, data.defaultBranch);
+      }
     } catch (error) {
+      console.error('Error fetching repo data:', error);
       toast({
         title: "エラー",
         description: error instanceof Error ? error.message : '不明なエラーが発生しました',
@@ -79,6 +96,8 @@ const Index = () => {
     setGenerating(true);
     
     try {
+      console.log('Generating markdown:', { repoUrl, branch, ignorePatterns, sourceIgnorePatterns });
+      
       const response = await fetch('/api/github/markdown', {
         method: 'POST',
         headers: {
@@ -94,13 +113,26 @@ const Index = () => {
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'マークダウンの生成に失敗しました');
+        let errorMessage = 'マークダウンの生成に失敗しました';
+        
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (parseError) {
+          // If we can't parse the JSON, use the status text
+          errorMessage = `エラー: ${response.status} ${response.statusText}`;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
+      console.log('Markdown generated successfully');
       setMarkdown(data.markdown);
     } catch (error) {
+      console.error('Error generating markdown:', error);
       toast({
         title: "エラー",
         description: error instanceof Error ? error.message : '不明なエラーが発生しました',
