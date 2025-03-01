@@ -1,4 +1,3 @@
-
 import { getDefaultBranch, getRepoTree, parseRepoUrl, getFileContent, clearApiCache } from "@/lib/github/api";
 import { buildFileTree, isLikelyBinaryFile } from "@/lib/github/fileUtils";
 import { toast } from "sonner";
@@ -14,8 +13,8 @@ export interface RepoData {
 // API呼び出しのタイムアウト設定（ミリ秒）
 const API_TIMEOUT = 120000; // 120秒に延長
 
-// 同時リクエスト数の制限をさらに減らす
-const MAX_CONCURRENT_REQUESTS = 3; // 少し増やして効率化
+// 同時リクエスト数の制限を1に設定
+const MAX_CONCURRENT_REQUESTS = 1;
 
 // タイムアウト付きのPromiseを作成する関数
 const withTimeout = <T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> => {
