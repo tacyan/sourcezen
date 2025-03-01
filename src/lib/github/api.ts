@@ -74,8 +74,8 @@ const apiCache: Record<string, {
   timestamp: number;
 }> = {};
 
-// キャッシュの有効期限を延長 (1時間)
-const CACHE_EXPIRATION = 60 * 60 * 1000;
+// キャッシュの有効期限を24時間に延長
+const CACHE_EXPIRATION = 24 * 60 * 60 * 1000;
 
 // 重複APIリクエストを防ぐためのマップ
 const pendingRequests: Map<string, Promise<any>> = new Map();
@@ -187,6 +187,9 @@ async function fetchGitHubApi(url: string): Promise<any> {
   const token = import.meta.env.VITE_GITHUB_TOKEN || '';
   if (token) {
     headers['Authorization'] = `token ${token}`;
+    console.log("Using GitHub authentication token");
+  } else {
+    console.log("No GitHub token found. Consider adding VITE_GITHUB_TOKEN to increase rate limits.");
   }
   
   // レート制限に関する情報をログに記録する関数
@@ -214,6 +217,10 @@ async function fetchGitHubApi(url: string): Promise<any> {
   // リクエストを作成し、pendingRequestsマップに追加
   const fetchPromise = new Promise(async (resolve, reject) => {
     try {
+      // レート制限を回避するため、ランダムな遅延を追加
+      const delay = Math.random() * 1000;
+      await new Promise(r => setTimeout(r, delay));
+      
       const response = await fetch(url, { headers });
       
       // レート制限情報をログに記録
@@ -356,6 +363,10 @@ export async function getFileContent(repoInfo: RepoInfo, filePath: string, branc
   // リクエストを作成
   const contentPromise = new Promise<string>(async (resolve, reject) => {
     try {
+      // レート制限を回避するため、ランダムな遅延を追加
+      const delay = Math.random() * 1000;
+      await new Promise(r => setTimeout(r, delay));
+      
       const data = await fetchGitHubApi(url);
       
       // GitHub API returns base64-encoded content
@@ -410,4 +421,5 @@ export function clearApiCache(): void {
     delete apiCache[key];
   });
   pendingRequests.clear();
+  console.log("API cache cleared. All pending requests canceled.");
 }
