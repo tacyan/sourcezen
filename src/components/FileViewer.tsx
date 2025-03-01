@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { FileText, Clipboard, Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 
 interface FileViewerProps {
   viewMode: 'single' | 'all';
@@ -32,7 +32,6 @@ const FileViewer: React.FC<FileViewerProps> = ({
   processedCount = 0,
   totalCount = 0,
 }) => {
-  // ファイルの拡張子から言語を推測する関数
   const getLanguageFromPath = (path: string): string => {
     const extension = path.split('.').pop()?.toLowerCase() || '';
     
@@ -111,7 +110,6 @@ const FileViewer: React.FC<FileViewerProps> = ({
     toast.success("マークダウンとしてダウンロードしました");
   };
 
-  // プログレスバーの表示
   const renderProgressBar = () => {
     const progressPercent = totalCount > 0 ? (processedCount / totalCount) * 100 : 0;
     
@@ -127,7 +125,6 @@ const FileViewer: React.FC<FileViewerProps> = ({
     );
   };
 
-  // 単一ファイル表示とマークダウン表示を統一して処理
   const renderAllFiles = () => {
     const files = Object.entries(allFilesContent);
     if (files.length === 0) {
@@ -158,6 +155,36 @@ const FileViewer: React.FC<FileViewerProps> = ({
         ))}
       </div>
     );
+  };
+
+  const renderActionButtons = () => {
+    if (markdownOutput || Object.keys(allFilesContent).length > 0) {
+      return (
+        <div className="flex justify-end mb-4 space-x-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={copyToClipboard}
+            title="コピー"
+          >
+            <Clipboard size={16} />
+            <span>コピー</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={downloadAsMarkdown}
+            title="ダウンロード"
+          >
+            <Download size={16} />
+            <span>ダウンロード</span>
+          </Button>
+        </div>
+      );
+    }
+    return null;
   };
 
   if (isLoadingAllFiles) {
@@ -209,9 +236,10 @@ const FileViewer: React.FC<FileViewerProps> = ({
     );
   }
 
-  // markdownOutputまたはallFilesContentのいずれかに基づいて表示
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in overflow-auto max-h-[80vh]">
+      {viewMode === 'all' && renderActionButtons()}
+      
       {viewMode === 'all' && Object.keys(allFilesContent).length > 0 ? (
         renderAllFiles()
       ) : viewMode === 'single' && selectedFile && allFilesContent[selectedFile] ? (
@@ -261,26 +289,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
         </div>
       )}
 
-      {(markdownOutput || Object.keys(allFilesContent).length > 0) && (
-        <div className="flex justify-end mt-6 space-x-3">
-          <button 
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
-            onClick={copyToClipboard}
-            title="コピー"
-          >
-            <Clipboard size={16} />
-            <span>コピー</span>
-          </button>
-          <button 
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
-            onClick={downloadAsMarkdown}
-            title="ダウンロード"
-          >
-            <Download size={16} />
-            <span>ダウンロード</span>
-          </button>
-        </div>
-      )}
+      {viewMode === 'single' && renderActionButtons()}
     </div>
   );
 };
