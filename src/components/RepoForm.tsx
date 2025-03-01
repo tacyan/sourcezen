@@ -87,6 +87,7 @@ const RepoForm = ({ onSubmit, isLoading }: RepoFormProps) => {
     'CONTRIBUTING.md',
     'CODE_OF_CONDUCT.md',
     'SECURITY.md',
+    'package-lock.json',
   ]);
 
   const handleSubmit = (e: React.FormEvent) => {
