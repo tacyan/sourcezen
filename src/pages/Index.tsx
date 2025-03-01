@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import RepoForm from "@/components/RepoForm";
@@ -12,6 +13,7 @@ import {
   fetchAllFilesContent, 
   fetchSingleFileContent, 
   clearCache as clearApiCache,
+  FileProgressCallback,
   RepoData
 } from "@/services/GitHubService";
 
@@ -34,10 +36,27 @@ const Index = () => {
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [hasLoadedAllFiles, setHasLoadedAllFiles] = useState(false);
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
     document.documentElement.classList.toggle('dark');
+  };
+
+  // プログレッシブローディング用のコールバック関数
+  const handleFileProgress: FileProgressCallback = (
+    filePath, 
+    content, 
+    processedCount, 
+    totalCount
+  ) => {
+    setAllFilesContent(prev => ({
+      ...prev,
+      [filePath]: content
+    }));
+    setProcessedCount(processedCount);
+    setTotalCount(totalCount);
   };
 
   const handleFileSelect = async (filePath: string) => {
@@ -136,18 +155,23 @@ const Index = () => {
     setViewMode('all');
     setHasError(false);
     setErrorMessage("");
+    setProcessedCount(0);
+    setTotalCount(0);
 
     try {
-      const { allFilesContent: newAllFiles, error } = await fetchAllFilesContent(repoData, fileTree, allFilesContent);
-      
-      if (error) {
-        setHasError(true);
-        setErrorMessage(error);
-      } else {
-        setAllFilesContent(newAllFiles);
-        setHasLoadedAllFiles(true);
-        toast.success(`${Object.keys(newAllFiles).length}個のファイルを読み込みました`);
-      }
+      // プログレスコールバックを使用して徐々にファイルを表示
+      fetchAllFilesContent(repoData, fileTree, allFilesContent, handleFileProgress)
+        .then(({ allFilesContent: newAllFiles, error }) => {
+          if (error) {
+            setHasError(true);
+            setErrorMessage(error);
+          } else {
+            setAllFilesContent(newAllFiles);
+            setHasLoadedAllFiles(true);
+            toast.success(`${Object.keys(newAllFiles).length}個のファイルを読み込みました`);
+          }
+          setIsLoadingAllFiles(false);
+        });
     } catch (error) {
       console.error("Error fetching all files:", error);
       setHasError(true);
@@ -157,7 +181,6 @@ const Index = () => {
         setErrorMessage("すべてのファイルを取得できませんでした。");
       }
       toast.error("すべてのファイルを取得できませんでした。");
-    } finally {
       setIsLoadingAllFiles(false);
     }
   };
@@ -169,14 +192,23 @@ const Index = () => {
       return;
     }
 
-    // マークダウンドキュメント生成ボタンが押されたら、常にAPIを叩いて最新データを取得
-    setIsLoadingAllFiles(true);
     setViewMode('all');
     setHasError(false);
     setErrorMessage("");
+    
+    // すでにキャッシュされている場合はそれを表示
+    if (hasLoadedAllFiles && Object.keys(allFilesContent).length > 0) {
+      toast.success(`${Object.keys(allFilesContent).length}個のファイルを表示します`);
+      return;
+    }
+    
+    // まだ読み込んでいない場合はプログレッシブローディングを開始
+    setIsLoadingAllFiles(true);
+    setProcessedCount(0);
+    setTotalCount(0);
 
-    // APIを叩いて全ファイルを取得
-    fetchAllFilesContent(repoData, fileTree, allFilesContent)
+    // プログレスコールバックを使用してAPI呼び出し
+    fetchAllFilesContent(repoData, fileTree, allFilesContent, handleFileProgress)
       .then(({ allFilesContent: newAllFiles, error }) => {
         if (error) {
           setHasError(true);
@@ -184,8 +216,8 @@ const Index = () => {
         } else {
           setAllFilesContent(newAllFiles);
           setHasLoadedAllFiles(true);
-          toast.success(`${Object.keys(newAllFiles).length}個のファイルを読み込みました`);
         }
+        setIsLoadingAllFiles(false);
       })
       .catch(error => {
         console.error("Error in generateMarkdownDocument:", error);
@@ -196,8 +228,6 @@ const Index = () => {
           setErrorMessage("マークダウンドキュメントの生成に失敗しました。");
         }
         toast.error("マークダウンドキュメントの生成に失敗しました。");
-      })
-      .finally(() => {
         setIsLoadingAllFiles(false);
       });
   };
@@ -214,6 +244,8 @@ const Index = () => {
     setHasError(false);
     setErrorMessage("");
     setHasLoadedAllFiles(false);
+    setProcessedCount(0);
+    setTotalCount(0);
     
     try {
       const { repoData: newRepoData, fileTree: newFileTree, error } = await fetchRepoData(repoUrl, maxDepth, ignorePatterns);
@@ -225,20 +257,23 @@ const Index = () => {
         setRepoData(newRepoData);
         setFileTree(newFileTree);
         
-        // リポジトリが読み込まれたら自動的にすべてのファイルを取得
-        toast.info("すべてのファイルを読み込みます...");
+        // リポジトリが読み込まれたら自動的にすべてのファイルを取得（プログレッシブに）
+        toast.info("ファイルを読み込んでいます...");
         setIsLoadingAllFiles(true);
         
+        // プログレスコールバックを使用してAPI呼び出し
         try {
-          const { allFilesContent: newAllFiles, error: filesError } = await fetchAllFilesContent(newRepoData, newFileTree, {});
-          
-          if (filesError) {
-            setHasError(true);
-            setErrorMessage(filesError);
-          } else {
-            setAllFilesContent(newAllFiles);
-            setHasLoadedAllFiles(true);
-          }
+          fetchAllFilesContent(newRepoData, newFileTree, {}, handleFileProgress)
+            .then(({ allFilesContent: newAllFiles, error: filesError }) => {
+              if (filesError) {
+                setHasError(true);
+                setErrorMessage(filesError);
+              } else {
+                setAllFilesContent(newAllFiles);
+                setHasLoadedAllFiles(true);
+              }
+              setIsLoadingAllFiles(false);
+            });
         } catch (fetchError) {
           console.error("Error auto-fetching all files:", fetchError);
           if (fetchError instanceof Error) {
@@ -246,7 +281,6 @@ const Index = () => {
           } else {
             toast.error("ファイルの自動取得に失敗しました");
           }
-        } finally {
           setIsLoadingAllFiles(false);
         }
       }
@@ -314,6 +348,8 @@ const Index = () => {
                 isLoadingAllFiles={isLoadingAllFiles}
                 hasError={hasError}
                 errorMessage={errorMessage}
+                processedCount={processedCount}
+                totalCount={totalCount}
               />
             </div>
           </div>

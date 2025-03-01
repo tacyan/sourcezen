@@ -158,16 +158,25 @@ export const fetchRepoData = async (
 // 既にファイルをフェッチ中かを追跡するためのマップ
 const pendingFileContentRequests = new Map<string, Promise<any>>();
 
+// 新しい型定義：ファイル取得プログレスコールバック
+export type FileProgressCallback = (
+  filePath: string, 
+  content: string, 
+  processedCount: number, 
+  totalCount: number
+) => void;
+
 export const fetchAllFilesContent = async (
   repoData: RepoData,
   fileTree: any,
-  currentFiles: Record<string, string> = {}
+  currentFiles: Record<string, string> = {},
+  progressCallback?: FileProgressCallback
 ): Promise<{ allFilesContent: Record<string, string>; error: string | null }> => {
   // ユニークなキャッシュキーを生成
   const cacheKey = `files_${repoData?.url || 'unknown'}_${fileTree ? Object.keys(fileTree).length : 0}`;
   
   // 進行中のリクエストがあればそれを再利用
-  if (pendingFileContentRequests.has(cacheKey)) {
+  if (pendingFileContentRequests.has(cacheKey) && !progressCallback) {
     console.log("Reusing in-flight files fetch request");
     return pendingFileContentRequests.get(cacheKey);
   }
@@ -233,6 +242,11 @@ export const fetchAllFilesContent = async (
               processedCount++;
               const progress = Math.round((processedCount / totalFiles) * 100);
               
+              // ストリーミング形式でコールバックを呼び出し、すぐにUI表示を更新
+              if (progressCallback) {
+                progressCallback(path, content, processedCount, totalFiles);
+              }
+              
               // 10%刻みでトースト表示（前回と同じ場合は表示しない）
               const progressMessage = `ファイル読み込み中: ${progress}% (${processedCount}/${totalFiles})`;
               if (progress % 10 === 0 && progressMessage !== lastProgressToast) {
@@ -244,6 +258,11 @@ export const fetchAllFilesContent = async (
               const errorMsg = error instanceof Error ? error.message : 'Unknown error';
               newAllFiles[path] = `// Error fetching file: ${errorMsg}`;
               processedCount++; // エラーでもカウントを進める
+              
+              // エラーの場合もコールバックを呼び出し
+              if (progressCallback) {
+                progressCallback(path, `// Error fetching file: ${errorMsg}`, processedCount, totalFiles);
+              }
             }
           })
         );
@@ -277,13 +296,19 @@ export const fetchAllFilesContent = async (
       toast.error(errorMessage);
       return { allFilesContent: {}, error: errorMessage };
     } finally {
-      // 完了したらマップから削除
-      pendingFileContentRequests.delete(cacheKey);
+      // プログレスコールバックがある場合は完了したらマップから削除しない
+      // これにより複数の呼び出し元が同じリクエストを共有できる
+      if (!progressCallback) {
+        pendingFileContentRequests.delete(cacheKey);
+      }
     }
   })();
   
   // 進行中のリクエストとして保存
-  pendingFileContentRequests.set(cacheKey, fetchPromise);
+  // プログレスコールバックがある場合も保存して並行処理を可能に
+  if (!pendingFileContentRequests.has(cacheKey)) {
+    pendingFileContentRequests.set(cacheKey, fetchPromise);
+  }
   
   return fetchPromise;
 };

@@ -7,6 +7,7 @@ import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import { Progress } from "@/components/ui/progress";
 
 interface FileViewerProps {
   viewMode: 'single' | 'all';
@@ -16,6 +17,8 @@ interface FileViewerProps {
   isLoadingAllFiles: boolean;
   hasError: boolean;
   errorMessage: string;
+  processedCount?: number;
+  totalCount?: number;
 }
 
 const FileViewer: React.FC<FileViewerProps> = ({
@@ -26,6 +29,8 @@ const FileViewer: React.FC<FileViewerProps> = ({
   isLoadingAllFiles,
   hasError,
   errorMessage,
+  processedCount = 0,
+  totalCount = 0,
 }) => {
   // ファイルの拡張子から言語を推測する関数
   const getLanguageFromPath = (path: string): string => {
@@ -106,6 +111,22 @@ const FileViewer: React.FC<FileViewerProps> = ({
     toast.success("マークダウンとしてダウンロードしました");
   };
 
+  // プログレスバーの表示
+  const renderProgressBar = () => {
+    const progressPercent = totalCount > 0 ? (processedCount / totalCount) * 100 : 0;
+    
+    return (
+      <div className="w-full space-y-2">
+        <div className="flex justify-between">
+          <span className="text-sm text-muted-foreground">
+            {processedCount} / {totalCount} ファイル ({Math.round(progressPercent)}%)
+          </span>
+        </div>
+        <Progress value={progressPercent} className="h-2" />
+      </div>
+    );
+  };
+
   if (isLoadingAllFiles) {
     return (
       <div className="glass-panel p-6 text-center animate-fade-in">
@@ -117,6 +138,19 @@ const FileViewer: React.FC<FileViewerProps> = ({
             <p className="font-medium">ファイルを読み込み中...</p>
             <p className="text-sm text-muted-foreground mt-1">大きなリポジトリの場合は時間がかかることがあります</p>
           </div>
+          
+          {/* プログレスバーを表示 */}
+          {totalCount > 0 && renderProgressBar()}
+          
+          {/* 既に読み込んだファイルがある場合は、それらを表示 */}
+          {Object.keys(allFilesContent).length > 0 && (
+            <div className="mt-4 w-full space-y-4">
+              <h4 className="text-lg font-medium text-left">読み込み済みファイル:</h4>
+              <div className="max-h-[400px] overflow-auto w-full">
+                {renderAllFiles()}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -144,9 +178,19 @@ const FileViewer: React.FC<FileViewerProps> = ({
 
   // 単一ファイル表示とマークダウン表示を統一して処理
   const renderAllFiles = () => {
+    const files = Object.entries(allFilesContent);
+    if (files.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+          <FileText size={48} className="opacity-50 mb-4" />
+          <p>ファイルが読み込まれていません</p>
+        </div>
+      );
+    }
+    
     return (
       <div className="space-y-8">
-        {Object.entries(allFilesContent).map(([path, content]) => (
+        {files.map(([path, content]) => (
           <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
             <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
               <FileText size={16} className="text-primary" />
