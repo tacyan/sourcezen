@@ -27,7 +27,7 @@ const RepoExplorerActions: React.FC<RepoExplorerActionsProps> = ({
           className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors relative"
           onClick={fetchAllFiles}
           disabled={isLoadingAllFiles}
-          title="すべてのファイルを読み込み"
+          title="保存済みファイルを表示（ファイル構成を見る）"
         >
           {isLoadingAllFiles ? (
             <Loader2 size={18} className="animate-spin" />
