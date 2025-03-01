@@ -153,14 +153,14 @@ const Index = () => {
     }
   };
 
-  // Modified function to automatically fetch and display all files
+  // マークダウンドキュメント生成機能 - すべてのファイル表示と同じ
   const generateMarkdownDocument = () => {
     if (!repoData || !fileTree) {
       toast.error("リポジトリデータがありません。");
       return;
     }
 
-    // Switch to "all" view mode and fetch all files
+    // すべてのファイルを取得して表示
     fetchAllFiles();
   };
 

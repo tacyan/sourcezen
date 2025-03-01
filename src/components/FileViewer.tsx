@@ -27,6 +27,40 @@ const FileViewer: React.FC<FileViewerProps> = ({
   hasError,
   errorMessage,
 }) => {
+  // ファイルの拡張子から言語を推測する関数
+  const getLanguageFromPath = (path: string): string => {
+    const extension = path.split('.').pop()?.toLowerCase() || '';
+    
+    const langMap: Record<string, string> = {
+      'js': 'javascript',
+      'jsx': 'jsx',
+      'ts': 'typescript',
+      'tsx': 'tsx',
+      'py': 'python',
+      'rb': 'ruby',
+      'java': 'java',
+      'php': 'php',
+      'go': 'go',
+      'rs': 'rust',
+      'c': 'c',
+      'cpp': 'cpp',
+      'cs': 'csharp',
+      'html': 'html',
+      'css': 'css',
+      'scss': 'scss',
+      'json': 'json',
+      'md': 'markdown',
+      'yml': 'yaml',
+      'yaml': 'yaml',
+      'xml': 'xml',
+      'sh': 'bash',
+      'bash': 'bash',
+      'txt': 'text',
+    };
+    
+    return langMap[extension] || extension || 'text';
+  };
+
   const copyToClipboard = () => {
     if (viewMode === 'single' && markdownOutput) {
       navigator.clipboard.writeText(markdownOutput)
@@ -34,7 +68,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
         .catch(() => toast.error("コピーに失敗しました"));
     } else if (viewMode === 'all') {
       const allFilesText = Object.entries(allFilesContent)
-        .map(([path, content]) => `# ${path}\n\n\`\`\`\n${content}\n\`\`\`\n\n`)
+        .map(([path, content]) => `# ${path}\n\n\`\`\`${getLanguageFromPath(path)}\n${content}\n\`\`\`\n\n`)
         .join('\n---\n\n');
       
       navigator.clipboard.writeText(allFilesText)
@@ -52,7 +86,10 @@ const FileViewer: React.FC<FileViewerProps> = ({
       filename = `${selectedFile?.split('/').pop() || 'file'}.md`;
     } else if (viewMode === 'all') {
       content = Object.entries(allFilesContent)
-        .map(([path, fileContent]) => `# ${path}\n\n\`\`\`\n${fileContent}\n\`\`\`\n\n`)
+        .map(([path, fileContent]) => {
+          const lang = getLanguageFromPath(path);
+          return `# ${path}\n\n\`\`\`${lang}\n${fileContent}\n\`\`\`\n\n`;
+        })
         .join('\n---\n\n');
       filename = 'repository_files.md';
     }
@@ -105,43 +142,47 @@ const FileViewer: React.FC<FileViewerProps> = ({
     );
   }
 
+  // 単一ファイル表示とマークダウン表示を統一して処理
+  const renderAllFiles = () => {
+    return (
+      <div className="space-y-8">
+        {Object.entries(allFilesContent).map(([path, content]) => (
+          <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
+            <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+              <FileText size={16} className="text-primary" />
+              {path}
+            </h3>
+            <SyntaxHighlighter
+              style={dracula}
+              language={getLanguageFromPath(path)}
+              customStyle={{ borderRadius: '0.5rem' }}
+            >
+              {content}
+            </SyntaxHighlighter>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // markdownOutputまたはallFilesContentのいずれかに基づいて表示
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in overflow-auto max-h-[80vh]">
-      {Object.keys(allFilesContent).length > 0 ? (
-        <div className="space-y-8">
-          {viewMode === 'all' ? (
-            Object.entries(allFilesContent).map(([path, content]) => (
-              <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
-                <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-                  <FileText size={16} className="text-primary" />
-                  {path}
-                </h3>
-                <SyntaxHighlighter
-                  style={dracula}
-                  language={path.split('.').pop()}
-                  customStyle={{ borderRadius: '0.5rem' }}
-                >
-                  {content}
-                </SyntaxHighlighter>
-              </div>
-            ))
-          ) : (
-            selectedFile && (
-              <div className="pb-6">
-                <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-                  <FileText size={16} className="text-primary" />
-                  {selectedFile}
-                </h3>
-                <SyntaxHighlighter
-                  style={dracula}
-                  language={selectedFile.split('.').pop()}
-                  customStyle={{ borderRadius: '0.5rem' }}
-                >
-                  {allFilesContent[selectedFile] || ''}
-                </SyntaxHighlighter>
-              </div>
-            )
-          )}
+      {viewMode === 'all' && Object.keys(allFilesContent).length > 0 ? (
+        renderAllFiles()
+      ) : viewMode === 'single' && selectedFile && allFilesContent[selectedFile] ? (
+        <div className="pb-6">
+          <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+            <FileText size={16} className="text-primary" />
+            {selectedFile}
+          </h3>
+          <SyntaxHighlighter
+            style={dracula}
+            language={getLanguageFromPath(selectedFile)}
+            customStyle={{ borderRadius: '0.5rem' }}
+          >
+            {allFilesContent[selectedFile] || ''}
+          </SyntaxHighlighter>
         </div>
       ) : markdownOutput ? (
         <ReactMarkdown

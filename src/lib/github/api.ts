@@ -74,8 +74,11 @@ const apiCache: Record<string, {
   timestamp: number;
 }> = {};
 
-// Cache expiration time (10 minutes)
-const CACHE_EXPIRATION = 10 * 60 * 1000;
+// キャッシュの有効期限を延長 (1時間)
+const CACHE_EXPIRATION = 60 * 60 * 1000;
+
+// 重複APIリクエストを防ぐためのマップ
+const pendingRequests: Map<string, Promise<any>> = new Map();
 
 /**
  * Parses a GitHub repository URL to extract owner and repo name
@@ -169,6 +172,12 @@ async function fetchGitHubApi(url: string): Promise<any> {
     return apiCache[url].data;
   }
 
+  // 既に同じURLへのリクエストが進行中なら、それを再利用
+  if (pendingRequests.has(url)) {
+    console.log("Reusing in-flight request for:", url);
+    return pendingRequests.get(url);
+  }
+
   const headers: HeadersInit = {
     'Accept': 'application/vnd.github.v3+json',
   };
@@ -180,37 +189,77 @@ async function fetchGitHubApi(url: string): Promise<any> {
     headers['Authorization'] = `token ${token}`;
   }
   
-  const response = await fetch(url, { headers });
-  
-  if (!response.ok) {
-    // More detailed error handling
-    let errorMessage = `GitHub API error: ${response.status} ${response.statusText}`;
+  // レート制限に関する情報をログに記録する関数
+  const logRateLimitInfo = (response: Response) => {
+    const remaining = response.headers.get('X-RateLimit-Remaining');
+    const limit = response.headers.get('X-RateLimit-Limit');
+    const reset = response.headers.get('X-RateLimit-Reset');
     
-    // Specific error messages based on status code
-    if (response.status === 404) {
-      errorMessage = `リポジトリまたはファイルが見つかりません (404)。URLを確認してください。`;
-    } else if (response.status === 403) {
-      const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
-      if (rateLimitRemaining === '0') {
-        errorMessage = `GitHub APIのレート制限に達しました (403)。環境変数 'VITE_GITHUB_TOKEN' に個人アクセストークンを設定することで制限を上げられます。`;
-      } else {
-        errorMessage = `アクセス権限がありません (403)。プライベートリポジトリには認証が必要です。`;
+    if (remaining && limit) {
+      const resetTime = reset ? new Date(parseInt(reset) * 1000).toLocaleTimeString() : 'unknown';
+      console.log(`GitHub API Rate Limit: ${remaining}/${limit} remaining, resets at ${resetTime}`);
+      
+      // 残りのレート制限が少なくなったら警告
+      if (parseInt(remaining) < 10) {
+        console.warn(`GitHub API Rate Limit Warning: Only ${remaining} requests remaining!`);
+        // レート制限に近づいている場合に警告トーストを表示
+        if (parseInt(remaining) < 5 && !apiCache[url]) {
+          // インポートできないのでグローバルに表示しない
+          console.error("Rate limit near exhaustion!");
+        }
       }
-    } else if (response.status === 401) {
-      errorMessage = `認証エラー (401)。GitHubトークンが無効または期限切れです。`;
     }
-
-    throw new Error(errorMessage);
-  }
-  
-  // Cache the successful response
-  const data = await response.json();
-  apiCache[url] = {
-    data,
-    timestamp: Date.now()
   };
+
+  // リクエストを作成し、pendingRequestsマップに追加
+  const fetchPromise = new Promise(async (resolve, reject) => {
+    try {
+      const response = await fetch(url, { headers });
+      
+      // レート制限情報をログに記録
+      logRateLimitInfo(response);
+      
+      if (!response.ok) {
+        // More detailed error handling
+        let errorMessage = `GitHub API error: ${response.status} ${response.statusText}`;
+        
+        // Specific error messages based on status code
+        if (response.status === 404) {
+          errorMessage = `リポジトリまたはファイルが見つかりません (404)。URLを確認してください。`;
+        } else if (response.status === 403) {
+          const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
+          if (rateLimitRemaining === '0') {
+            errorMessage = `GitHub APIのレート制限に達しました (403)。環境変数 'VITE_GITHUB_TOKEN' に個人アクセストークンを設定することで制限を上げられます。`;
+          } else {
+            errorMessage = `アクセス権限がありません (403)。プライベートリポジトリには認証が必要です。`;
+          }
+        } else if (response.status === 401) {
+          errorMessage = `認証エラー (401)。GitHubトークンが無効または期限切れです。`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      // Cache the successful response
+      const data = await response.json();
+      apiCache[url] = {
+        data,
+        timestamp: Date.now()
+      };
+      
+      resolve(data);
+    } catch (error) {
+      reject(error);
+    } finally {
+      // リクエストが完了したら、pendingRequestsマップから削除
+      pendingRequests.delete(url);
+    }
+  });
   
-  return data;
+  // 保留中のリクエストとして登録
+  pendingRequests.set(url, fetchPromise);
+  
+  return fetchPromise;
 }
 
 /**
@@ -296,39 +345,61 @@ export async function getFileContent(repoInfo: RepoInfo, filePath: string, branc
     return apiCache[cacheKey].data;
   }
   
-  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${filePath}?ref=${branch}`;
-  const data = await fetchGitHubApi(url);
-  
-  // GitHub API returns base64-encoded content
-  let content = '';
-  if (data.encoding === 'base64' && data.content) {
-    try {
-      // Fix for Japanese characters - use the TextDecoder API for proper UTF-8 decoding
-      const base64 = data.content.replace(/\n/g, '');
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      
-      // Use TextDecoder for proper UTF-8 handling
-      const decoder = new TextDecoder('utf-8');
-      content = decoder.decode(bytes);
-      
-      // Cache the decoded content
-      apiCache[cacheKey] = {
-        data: content,
-        timestamp: Date.now()
-      };
-    } catch (error) {
-      console.error("Error decoding file content:", error);
-      // Fallback to regular decoding if TextDecoder fails
-      content = atob(data.content.replace(/\n/g, ''));
-    }
+  // 同じファイルへの進行中のリクエストを再利用
+  if (pendingRequests.has(cacheKey)) {
+    console.log("Reusing in-flight request for file:", filePath);
+    return pendingRequests.get(cacheKey);
   }
   
-  return content;
+  const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${filePath}?ref=${branch}`;
+  
+  // リクエストを作成
+  const contentPromise = new Promise<string>(async (resolve, reject) => {
+    try {
+      const data = await fetchGitHubApi(url);
+      
+      // GitHub API returns base64-encoded content
+      let content = '';
+      if (data.encoding === 'base64' && data.content) {
+        try {
+          // Fix for Japanese characters - use the TextDecoder API for proper UTF-8 decoding
+          const base64 = data.content.replace(/\n/g, '');
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          
+          // Use TextDecoder for proper UTF-8 handling
+          const decoder = new TextDecoder('utf-8');
+          content = decoder.decode(bytes);
+          
+          // Cache the decoded content
+          apiCache[cacheKey] = {
+            data: content,
+            timestamp: Date.now()
+          };
+        } catch (error) {
+          console.error("Error decoding file content:", error);
+          // Fallback to regular decoding if TextDecoder fails
+          content = atob(data.content.replace(/\n/g, ''));
+        }
+      }
+      
+      resolve(content);
+    } catch (error) {
+      reject(error);
+    } finally {
+      // リクエストが完了したら、pendingRequestsマップから削除
+      pendingRequests.delete(cacheKey);
+    }
+  });
+  
+  // 保留中のリクエストとして登録
+  pendingRequests.set(cacheKey, contentPromise);
+  
+  return contentPromise;
 }
 
 /**
@@ -338,4 +409,5 @@ export function clearApiCache(): void {
   Object.keys(apiCache).forEach(key => {
     delete apiCache[key];
   });
+  pendingRequests.clear();
 }

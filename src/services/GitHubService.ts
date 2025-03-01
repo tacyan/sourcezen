@@ -11,7 +11,10 @@ export interface RepoData {
 }
 
 // API呼び出しのタイムアウト設定（ミリ秒）
-const API_TIMEOUT = 30000;
+const API_TIMEOUT = 60000; // 60秒に延長
+
+// 同時リクエスト数の制限
+const MAX_CONCURRENT_REQUESTS = 3;
 
 // タイムアウト付きのPromiseを作成する関数
 const withTimeout = <T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> => {
@@ -24,6 +27,51 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, errorMessage: string): 
 
   return Promise.race([promise, timeout]);
 };
+
+// ファイル取得用のキューシステム
+class RequestQueue {
+  private queue: Array<() => Promise<void>> = [];
+  private running = 0;
+  private maxConcurrent: number;
+
+  constructor(maxConcurrent: number) {
+    this.maxConcurrent = maxConcurrent;
+  }
+
+  async add<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const result = await task();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        } finally {
+          this.running--;
+          this.runNext();
+        }
+      });
+      
+      // キューを処理
+      if (this.running < this.maxConcurrent) {
+        this.runNext();
+      }
+    });
+  }
+
+  private runNext() {
+    if (this.queue.length > 0 && this.running < this.maxConcurrent) {
+      const task = this.queue.shift();
+      if (task) {
+        this.running++;
+        task();
+      }
+    }
+  }
+}
+
+// リクエストキューのインスタンスを作成
+const requestQueue = new RequestQueue(MAX_CONCURRENT_REQUESTS);
 
 export const fetchRepoData = async (
   repoUrl: string, 
@@ -112,47 +160,44 @@ export const fetchAllFilesContent = async (
     
     // プログレス表示用のカウンター
     let processedCount = 0;
-    const totalFiles = filePaths.filter(path => !isLikelyBinaryFile(path) && !currentFiles[path]).length;
+    const filesToProcess = filePaths.filter(path => !isLikelyBinaryFile(path) && !currentFiles[path]);
+    const totalFiles = filesToProcess.length;
     let lastProgressToast: string | null = null;
     
     const newAllFiles = { ...currentFiles };
-    const fetchPromises = filePaths
-      .filter(path => !isLikelyBinaryFile(path) && !newAllFiles[path])
-      .map(async (path) => {
-        try {
-          // 個別のファイル取得にもタイムアウトを設定
-          const content = await withTimeout(
+    
+    // 並列処理を減らし、キューシステムを使用
+    for (let i = 0; i < filesToProcess.length; i++) {
+      const path = filesToProcess[i];
+      try {
+        // キューを使ってファイルコンテンツを取得（制限された並列度で）
+        const content = await requestQueue.add(() => 
+          withTimeout(
             getFileContent(repoData, path, repoData.branch),
-            API_TIMEOUT / 2, // 個別ファイルは短めのタイムアウト
+            API_TIMEOUT / 2,
             `ファイル「${path}」の取得に失敗しました`
-          );
-          
-          newAllFiles[path] = content;
-          
-          // 進捗を更新
-          processedCount++;
-          const progress = Math.round((processedCount / totalFiles) * 100);
-          
-          // 10%刻みでトースト表示（前回と同じ場合は表示しない）
-          const progressMessage = `ファイル読み込み中: ${progress}% (${processedCount}/${totalFiles})`;
-          if (progress % 10 === 0 && progressMessage !== lastProgressToast) {
-            toast.info(progressMessage);
-            lastProgressToast = progressMessage;
-          }
-        } catch (error) {
-          console.error(`Error fetching ${path}:`, error);
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          newAllFiles[path] = `// Error fetching file: ${errorMsg}`;
-          processedCount++; // エラーでもカウントを進める
+          )
+        );
+        
+        newAllFiles[path] = content;
+        
+        // 進捗を更新
+        processedCount++;
+        const progress = Math.round((processedCount / totalFiles) * 100);
+        
+        // 10%刻みでトースト表示（前回と同じ場合は表示しない）
+        const progressMessage = `ファイル読み込み中: ${progress}% (${processedCount}/${totalFiles})`;
+        if (progress % 10 === 0 && progressMessage !== lastProgressToast) {
+          toast.info(progressMessage);
+          lastProgressToast = progressMessage;
         }
-      });
-
-    // すべてのファイル取得が完了するかタイムアウトするまで待機
-    await withTimeout(
-      Promise.all(fetchPromises),
-      API_TIMEOUT * 2, // 全体のタイムアウトは長め
-      "ファイル取得処理がタイムアウトしました"
-    );
+      } catch (error) {
+        console.error(`Error fetching ${path}:`, error);
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        newAllFiles[path] = `// Error fetching file: ${errorMsg}`;
+        processedCount++; // エラーでもカウントを進める
+      }
+    }
 
     if (Object.keys(newAllFiles).length === 0) {
       throw new Error("ファイルを読み込めませんでした。URLを確認するか、別のリポジトリを試してください。");

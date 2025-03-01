@@ -39,7 +39,7 @@ const RepoExplorerActions: React.FC<RepoExplorerActionsProps> = ({
           className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
           onClick={generateMarkdownDocument}
           disabled={isLoadingAllFiles}
-          title="マークダウンドキュメントとして表示"
+          title="マークダウンドキュメントとして表示（すべてのファイルを読み込みます）"
         >
           <FileText size={18} />
         </button>
