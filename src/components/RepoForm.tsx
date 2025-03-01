@@ -4,7 +4,7 @@ import { Github, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { parseRepoUrl } from '@/lib/github/api';
 
 interface RepoFormProps {
-  onSubmit: (repoUrl: string, maxDepth: number) => void;
+  onSubmit: (repoUrl: string, maxDepth: number, ignorePatterns: string[]) => void;
   isLoading: boolean;
 }
 
@@ -13,6 +13,81 @@ const RepoForm = ({ onSubmit, isLoading }: RepoFormProps) => {
   const [maxDepth, setMaxDepth] = useState(5);
   const [showOptions, setShowOptions] = useState(false);
   const [error, setError] = useState('');
+  const [ignorePatterns, setIgnorePatterns] = useState<string[]>([
+    // デフォルトの除外パターン
+    'node_modules/',
+    '.git/',
+    '.github/',
+    'dist/',
+    'build/',
+    // 追加の除外パターン
+    'out/',
+    '.next/',
+    '.nuxt/',
+    '.output/',
+    '.pnp/',
+    '.pnp.js',
+    'vendor/',
+    '.venv/',
+    'venv/',
+    'env/',
+    '.env/',
+    'pip-wheel-metadata/',
+    '.cache/',
+    '.eslintcache',
+    '.stylelintcache',
+    '.parcel-cache',
+    '.rts2_cache_*/',
+    '.rts2_cache/',
+    '.npm/',
+    '.yarn/',
+    '.pnpm/',
+    'logs/',
+    '*.log',
+    'npm-debug.log*',
+    'yarn-debug.log*',
+    'yarn-error.log*',
+    'pnpm-debug.log*',
+    '.env',
+    '.env.local',
+    '.env.development.local',
+    '.env.test.local',
+    '.env.production.local',
+    '.idea/',
+    '.vscode/',
+    '.vs/',
+    '*.sublime-*',
+    '*.swp',
+    '*.swo',
+    '.DS_Store',
+    'Thumbs.db',
+    'coverage/',
+    '.nyc_output/',
+    '.jest/',
+    '.cypress/',
+    'cypress/videos/',
+    'cypress/screenshots/',
+    '*.exe',
+    '*.dll',
+    '*.so',
+    '*.dylib',
+    '*.bin',
+    '*.obj',
+    '*.o',
+    '*.a',
+    '*.lib',
+    '*.out',
+    '*.app',
+    '.gitlab/',
+    '.circleci/',
+    '.travis.yml',
+    'LICENSE',
+    'LICENSE.*',
+    'CHANGELOG.md',
+    'CONTRIBUTING.md',
+    'CODE_OF_CONDUCT.md',
+    'SECURITY.md',
+  ]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,11 +104,21 @@ const RepoForm = ({ onSubmit, isLoading }: RepoFormProps) => {
     }
     
     setError('');
-    onSubmit(repoUrl, maxDepth);
+    onSubmit(repoUrl, maxDepth, ignorePatterns);
   };
 
   const handleMaxDepthChange = (newValue: number) => {
     setMaxDepth(newValue);
+  };
+
+  const addIgnorePattern = (pattern: string) => {
+    if (pattern && !ignorePatterns.includes(pattern)) {
+      setIgnorePatterns([...ignorePatterns, pattern]);
+    }
+  };
+
+  const removeIgnorePattern = (pattern: string) => {
+    setIgnorePatterns(ignorePatterns.filter(p => p !== pattern));
   };
 
   return (
@@ -124,6 +209,51 @@ const RepoForm = ({ onSubmit, isLoading }: RepoFormProps) => {
                     onClick={() => handleMaxDepthChange(-1)}
                   >
                     制限なし
+                  </button>
+                </div>
+              </div>
+              
+              <div className="mt-4">
+                <label className="block text-sm font-medium mb-2">
+                  除外パターン
+                </label>
+                <div className="flex flex-wrap gap-2 mt-2 mb-3">
+                  {ignorePatterns.map((pattern, index) => (
+                    <div key={index} className="inline-flex items-center bg-secondary rounded-full px-3 py-1 text-sm">
+                      <span>{pattern}</span>
+                      <button 
+                        type="button" 
+                        className="ml-2 text-muted-foreground hover:text-destructive transitions-all"
+                        onClick={() => removeIgnorePattern(pattern)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex">
+                  <input
+                    type="text"
+                    placeholder="除外するファイル/ディレクトリパターン"
+                    className="flex-1 px-3 py-2 border border-input rounded-l-md focus:outline-none focus:ring-2 focus:ring-ring"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addIgnorePattern(e.currentTarget.value);
+                        e.currentTarget.value = '';
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="bg-primary text-primary-foreground px-3 py-2 rounded-r-md"
+                    onClick={(e) => {
+                      const input = e.currentTarget.previousSibling as HTMLInputElement;
+                      addIgnorePattern(input.value);
+                      input.value = '';
+                    }}
+                  >
+                    追加
                   </button>
                 </div>
               </div>
