@@ -54,6 +54,8 @@ const FileTreeNode = ({
       return <File className="text-purple-500" size={16} />;
     } else if (extension === 'html') {
       return <File className="text-orange-500" size={16} />;
+    } else if (extension === 'svg' || extension === 'png' || extension === 'jpg' || extension === 'jpeg' || extension === 'gif') {
+      return <File className="text-green-400" size={16} />;
     } else {
       return <File className="text-gray-500" size={16} />;
     }

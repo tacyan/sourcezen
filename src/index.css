@@ -5,7 +5,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
+    --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
 
     --card: 0 0% 100%;
@@ -77,7 +77,7 @@
   }
   
   .glass-panel {
-    @apply bg-white bg-opacity-70 backdrop-blur-md rounded-lg border border-white border-opacity-20 shadow-lg;
+    @apply bg-white dark:bg-gray-800 bg-opacity-70 dark:bg-opacity-40 backdrop-blur-md rounded-lg border border-white border-opacity-20 dark:border-gray-700 shadow-lg;
   }
   
   .transitions-all {
@@ -121,7 +121,7 @@
 
   /* Markdown output styling */
   .markdown-output {
-    @apply prose prose-slate max-w-none dark:prose-invert;
+    @apply prose prose-slate dark:prose-invert max-w-none;
   }
 
   .markdown-output pre {

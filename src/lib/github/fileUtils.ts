@@ -1,4 +1,3 @@
-
 /**
  * File utility functions
  * 
@@ -34,26 +33,10 @@ export function shouldIgnore(path: string, ignorePatterns: string[]): boolean {
   }
   
   // Common problematic file extensions that should be ignored by default
-  const problematicExtensions = ['.html', '.htm', '.xml', '.svg', '.dtd'];
+  const problematicExtensions = ['.dtd'];
   const fileExtension = path.match(/\.([^.]+)$/)?.[0] || '';
   
   if (problematicExtensions.includes(fileExtension)) {
-    return true;
-  }
-  
-  // Common problematic path patterns
-  const problematicPatterns = [
-    'index.html',
-    'index.htm',
-    'feed.xml',
-    'sitemap.xml',
-    '404.html',
-    'public/index.html',
-    'dist/index.html',
-    'build/index.html'
-  ];
-  
-  if (problematicPatterns.some(pattern => path.endsWith(pattern))) {
     return true;
   }
   
@@ -145,15 +128,6 @@ export function buildFileTree(
         path: item.path,
         type: 'file'
       });
-    }
-  }
-  
-  // Clean up the tree if there's only one folder at the root level
-  if (root.children?.length === 1 && root.children[0].type === 'directory') {
-    const singleDir = root.children[0];
-    // If it's a special folder like .github, don't promote it
-    if (!singleDir.name.startsWith('.')) {
-      return singleDir;
     }
   }
   
