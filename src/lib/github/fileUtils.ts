@@ -1,3 +1,4 @@
+
 /**
  * File utility functions
  * 
@@ -55,6 +56,17 @@ export function shouldIgnore(path: string, ignorePatterns: string[]): boolean {
     if (regex.test(path)) {
       return true;
     }
+    
+    // Check if path starts with the pattern (directory-like matching)
+    if (path.startsWith(pattern + '/')) {
+      return true;
+    }
+    
+    // Check if path contains the pattern as a directory
+    const pathParts = path.split('/');
+    if (pathParts.some(part => part === pattern)) {
+      return true;
+    }
   }
   
   return false;
@@ -107,6 +119,16 @@ export function buildFileTree(
       // Skip if at root
       if (!part) continue;
       
+      // Check if this path part should be ignored
+      if (ignorePatterns.includes(part)) {
+        // Skip this entire subtree
+        currentNode = null;
+        break;
+      }
+      
+      // If we've set currentNode to null, we're skipping this subtree
+      if (!currentNode) break;
+      
       // Find or create directory node
       let foundNode = currentNode.children?.find(child => child.name === part);
       if (!foundNode) {
@@ -120,6 +142,9 @@ export function buildFileTree(
       }
       currentNode = foundNode;
     }
+    
+    // If we're skipping this subtree or if the filename should be ignored, continue
+    if (!currentNode || ignorePatterns.includes(fileName)) continue;
     
     // Add file node
     if (item.type === 'blob') {

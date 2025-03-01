@@ -49,6 +49,24 @@ interface TreeItem {
   url: string;
 }
 
+// Common directories and files to ignore by default
+const DEFAULT_IGNORE_PATTERNS = [
+  '.git', 
+  'node_modules', 
+  '.DS_Store', 
+  'dist', 
+  'build',
+  '.env',
+  '.env.local',
+  '.env.development.local',
+  '.env.test.local',
+  '.env.production.local',
+  'npm-debug.log',
+  'yarn-debug.log',
+  'yarn-error.log',
+  'coverage'
+];
+
 // Cache for API responses to reduce GitHub API calls
 const apiCache: Record<string, {
   data: any;
@@ -91,6 +109,50 @@ export function parseRepoUrl(url: string): RepoInfo | null {
   }
   
   return null;
+}
+
+/**
+ * Checks if a file or directory should be ignored based on patterns
+ * 
+ * @param path - File or directory path
+ * @param ignorePatterns - Array of patterns to ignore
+ * @returns Boolean indicating if the path should be ignored
+ */
+export function shouldIgnorePath(path: string, ignorePatterns: string[] = []): boolean {
+  // Always check against default ignore patterns
+  const patterns = [...DEFAULT_IGNORE_PATTERNS, ...ignorePatterns];
+  
+  // Check if path starts with or contains any ignore pattern
+  for (const pattern of patterns) {
+    // Direct match
+    if (path === pattern) {
+      return true;
+    }
+    
+    // Check if the path is a subdirectory of the pattern
+    if (path.startsWith(`${pattern}/`)) {
+      return true;
+    }
+    
+    // Check if path contains the pattern as a directory
+    if (path.includes(`/${pattern}/`)) {
+      return true;
+    }
+    
+    // Check with * wildcard (simple implementation)
+    if (pattern.includes('*')) {
+      const regex = new RegExp(
+        pattern
+          .replace(/\./g, '\\.')
+          .replace(/\*/g, '.*')
+      );
+      if (regex.test(path)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
 }
 
 /**
@@ -200,12 +262,19 @@ export async function getRepositoryContributors(repoUrl: string, limit: number =
  * 
  * @param repoInfo - Repository information
  * @param branch - Branch name
- * @returns Repository tree
+ * @param ignorePatterns - Patterns to ignore (like .gitignore)
+ * @returns Repository tree with ignored files removed
  */
-export async function getRepoTree(repoInfo: RepoInfo, branch: string): Promise<TreeItem[]> {
+export async function getRepoTree(
+  repoInfo: RepoInfo, 
+  branch: string,
+  ignorePatterns: string[] = []
+): Promise<TreeItem[]> {
   const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees/${branch}?recursive=1`;
   const data = await fetchGitHubApi(url);
-  return data.tree;
+  
+  // Filter out ignored files and directories
+  return data.tree.filter((item: TreeItem) => !shouldIgnorePath(item.path, ignorePatterns));
 }
 
 /**

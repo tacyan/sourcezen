@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import RepoForm from "@/components/RepoForm";
@@ -320,8 +319,8 @@ const Index = () => {
       // Get the default branch name
       const defaultBranch = await getDefaultBranch(repoInfo);
       
-      // Get the repo file tree
-      const tree = await getRepoTree(repoInfo, defaultBranch);
+      // Get the repo file tree - pass ignore patterns to filter files
+      const tree = await getRepoTree(repoInfo, defaultBranch, ignorePatterns);
       
       // Build the file tree
       const root = buildFileTree(tree, ignorePatterns, maxDepth);
