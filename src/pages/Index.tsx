@@ -40,7 +40,6 @@ const Index = () => {
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
-  // Toggle dark mode
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
     document.documentElement.classList.toggle('dark');
@@ -72,14 +71,16 @@ const Index = () => {
         return;
       }
       
-      // Generate documentation markup for the file
+      const newContent = {};
+      newContent[filePath] = fileContent;
+      setAllFilesContent(newContent);
+      
       let output = `# ${filePath}\n\n`;
       output += "```\n";
       output += fileContent;
       output += "\n```\n";
       
       if (sourceIgnorePatterns.length > 0) {
-        // Apply source ignore patterns if needed
         const lines = output.split('\n');
         const filteredLines = lines.filter(line => {
           return !sourceIgnorePatterns.some(pattern => line.includes(pattern));
@@ -116,7 +117,6 @@ const Index = () => {
     setErrorMessage("");
     const allFiles: AllFilesContent = {};
 
-    // Helper function to recursively get all file paths
     const getAllFilePaths = (node: FileNode): string[] => {
       const paths: string[] = [];
       if (node.type === 'file' && node.path) {
@@ -133,13 +133,11 @@ const Index = () => {
     const filePaths = getAllFilePaths(fileTree);
     
     try {
-      // Use Promise.all to fetch all files in parallel
       await Promise.all(
         filePaths.map(async (path) => {
           if (!isLikelyBinaryFile(path)) {
             try {
               const content = await getFileContent(repoData, path, repoData.branch);
-              // エンコーディングの問題を解決するためにデコード処理は行わない
               allFiles[path] = content;
             } catch (error) {
               console.error(`Error fetching ${path}:`, error);
@@ -183,7 +181,6 @@ const Index = () => {
     setHasError(false);
     setErrorMessage("");
     
-    // Helper function to recursively get all file paths
     const getAllFilePaths = (node: FileNode): string[] => {
       const paths: string[] = [];
       if (node.type === 'file' && node.path) {
@@ -199,7 +196,6 @@ const Index = () => {
 
     const filePaths = getAllFilePaths(fileTree).filter(path => !isLikelyBinaryFile(path));
     
-    // Sort files by path to group similar files together
     filePaths.sort();
     
     fetchAllFilesForMarkdown(filePaths);
@@ -211,12 +207,10 @@ const Index = () => {
     const allFiles: AllFilesContent = {};
     
     try {
-      // Use Promise.all to fetch all files in parallel
       await Promise.all(
         filePaths.map(async (path) => {
           try {
             const content = await getFileContent(repoData, path, repoData.branch);
-            // 文字化けを防ぐために、生のコンテンツをそのまま使用
             allFiles[path] = content;
           } catch (error) {
             console.error(`Error fetching ${path}:`, error);
@@ -310,19 +304,15 @@ const Index = () => {
     try {
       console.info("Fetching repo data:", { repoUrl, ignorePatterns, maxDepth });
       
-      // Parse the repo URL to get owner and repo name
       const repoInfo = parseRepoUrl(repoUrl);
       if (!repoInfo) {
         throw new Error("無効なリポジトリURLです。");
       }
       
-      // Get the default branch name
       const defaultBranch = await getDefaultBranch(repoInfo);
       
-      // Get the repo file tree - pass ignore patterns to filter files
       const tree = await getRepoTree(repoInfo, defaultBranch, ignorePatterns);
       
-      // Build the file tree
       const root = buildFileTree(tree, ignorePatterns, maxDepth);
       
       setRepoData({
@@ -338,11 +328,9 @@ const Index = () => {
     } catch (error) {
       console.error("Error fetching repo data:", error);
       
-      // エラーメッセージをより詳細に表示
       let errorMessage = "リポジトリデータの取得に失敗しました。";
       
       if (error instanceof Error) {
-        // エラーの詳細情報を追加
         errorMessage = error.message;
       }
       
@@ -488,9 +476,27 @@ const Index = () => {
                     )}
                   </div>
                 </div>
-              ) : viewMode === 'single' ? (
-                markdownOutput ? (
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 markdown-output animate-fade-in overflow-auto max-h-[80vh]">
+              ) : (
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in overflow-auto max-h-[80vh]">
+                  {Object.keys(allFilesContent).length > 0 ? (
+                    <div className="space-y-8">
+                      {Object.entries(allFilesContent).map(([path, content]) => (
+                        <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                          <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                            <FileText size={16} className="text-primary" />
+                            {path}
+                          </h3>
+                          <SyntaxHighlighter
+                            style={dracula}
+                            language={path.split('.').pop()}
+                            customStyle={{ borderRadius: '0.5rem' }}
+                          >
+                            {content}
+                          </SyntaxHighlighter>
+                        </div>
+                      ))}
+                    </div>
+                  ) : markdownOutput ? (
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       rehypePlugins={[rehypeRaw]}
@@ -516,35 +522,6 @@ const Index = () => {
                     >
                       {markdownOutput}
                     </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div className="glass-panel p-6 text-center animate-fade-in">
-                    <div className="flex flex-col items-center justify-center space-y-4 text-muted-foreground">
-                      <FileText size={48} className="opacity-50" />
-                      <p>ファイルを選択するとコンテンツが表示されます</p>
-                    </div>
-                  </div>
-                )
-              ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in overflow-auto max-h-[80vh]">
-                  {Object.keys(allFilesContent).length > 0 ? (
-                    <div className="space-y-8">
-                      {Object.entries(allFilesContent).map(([path, content]) => (
-                        <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
-                          <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-                            <FileText size={16} className="text-primary" />
-                            {path}
-                          </h3>
-                          <SyntaxHighlighter
-                            style={dracula}
-                            language={path.split('.').pop()}
-                            customStyle={{ borderRadius: '0.5rem' }}
-                          >
-                            {content}
-                          </SyntaxHighlighter>
-                        </div>
-                      ))}
-                    </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
                       <FolderTree size={48} className="opacity-50 mb-4" />
