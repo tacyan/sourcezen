@@ -1,3 +1,4 @@
+
 /**
  * GitHub API utilities
  * 
@@ -301,13 +302,30 @@ export async function getFileContent(repoInfo: RepoInfo, filePath: string, branc
   // GitHub API returns base64-encoded content
   let content = '';
   if (data.encoding === 'base64' && data.content) {
-    content = atob(data.content.replace(/\n/g, ''));
-    
-    // Cache the decoded content
-    apiCache[cacheKey] = {
-      data: content,
-      timestamp: Date.now()
-    };
+    try {
+      // Fix for Japanese characters - use the TextDecoder API for proper UTF-8 decoding
+      const base64 = data.content.replace(/\n/g, '');
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      
+      // Use TextDecoder for proper UTF-8 handling
+      const decoder = new TextDecoder('utf-8');
+      content = decoder.decode(bytes);
+      
+      // Cache the decoded content
+      apiCache[cacheKey] = {
+        data: content,
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error("Error decoding file content:", error);
+      // Fallback to regular decoding if TextDecoder fails
+      content = atob(data.content.replace(/\n/g, ''));
+    }
   }
   
   return content;
