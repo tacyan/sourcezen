@@ -56,10 +56,34 @@ const Index = () => {
       toast.error("リポジトリデータがありません。");
       return;
     }
-    
+
     try {
-      console.info("Fetching file content:", { filePath });
+      console.info("Handling file select:", { filePath });
       
+      // Check if we already have this file in our cache
+      if (allFilesContent[filePath]) {
+        console.info("Using cached file content");
+        
+        let output = `# ${filePath}\n\n`;
+        output += "```\n";
+        output += allFilesContent[filePath];
+        output += "\n```\n";
+        
+        if (sourceIgnorePatterns.length > 0) {
+          const lines = output.split('\n');
+          const filteredLines = lines.filter(line => {
+            return !sourceIgnorePatterns.some(pattern => line.includes(pattern));
+          });
+          output = filteredLines.join('\n');
+        }
+        
+        setMarkdownOutput(output);
+        toast.success("ファイルを読み込みました");
+        return;
+      }
+      
+      // If not in cache, fetch it
+      console.info("Fetching file content from API");
       const fileContent = await getFileContent(
         repoData,
         filePath,
@@ -71,7 +95,8 @@ const Index = () => {
         return;
       }
       
-      const newContent = {};
+      // Update all files content with this new file
+      const newContent = { ...allFilesContent };
       newContent[filePath] = fileContent;
       setAllFilesContent(newContent);
       
@@ -115,7 +140,6 @@ const Index = () => {
     setViewMode('all');
     setHasError(false);
     setErrorMessage("");
-    const allFiles: AllFilesContent = {};
 
     const getAllFilePaths = (node: FileNode): string[] => {
       const paths: string[] = [];
@@ -133,28 +157,29 @@ const Index = () => {
     const filePaths = getAllFilePaths(fileTree);
     
     try {
-      await Promise.all(
-        filePaths.map(async (path) => {
-          if (!isLikelyBinaryFile(path)) {
-            try {
-              const content = await getFileContent(repoData, path, repoData.branch);
-              allFiles[path] = content;
-            } catch (error) {
-              console.error(`Error fetching ${path}:`, error);
-              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-              allFiles[path] = `// Error fetching file: ${errorMsg}`;
-            }
+      const newAllFiles = { ...allFilesContent };
+      const fetchPromises = filePaths
+        .filter(path => !isLikelyBinaryFile(path) && !newAllFiles[path])
+        .map(async (path) => {
+          try {
+            const content = await getFileContent(repoData, path, repoData.branch);
+            newAllFiles[path] = content;
+          } catch (error) {
+            console.error(`Error fetching ${path}:`, error);
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            newAllFiles[path] = `// Error fetching file: ${errorMsg}`;
           }
-        })
-      );
+        });
 
-      if (Object.keys(allFiles).length === 0) {
+      await Promise.all(fetchPromises);
+
+      if (Object.keys(newAllFiles).length === 0) {
         setHasError(true);
         setErrorMessage("ファイルを読み込めませんでした。URLを確認するか、別のリポジトリを試してください。");
         toast.error("ファイルを読み込めませんでした。");
       } else {
-        setAllFilesContent(allFiles);
-        toast.success(`${Object.keys(allFiles).length}個のファイルを読み込みました`);
+        setAllFilesContent(newAllFiles);
+        toast.success(`${Object.keys(newAllFiles).length}個のファイルを読み込みました`);
       }
     } catch (error) {
       console.error("Error fetching all files:", error);
@@ -176,70 +201,7 @@ const Index = () => {
       return;
     }
 
-    setIsLoadingAllFiles(true);
-    setViewMode('all');
-    setHasError(false);
-    setErrorMessage("");
-    
-    const getAllFilePaths = (node: FileNode): string[] => {
-      const paths: string[] = [];
-      if (node.type === 'file' && node.path) {
-        return [node.path];
-      }
-      if (node.children) {
-        for (const child of node.children) {
-          paths.push(...getAllFilePaths(child));
-        }
-      }
-      return paths;
-    };
-
-    const filePaths = getAllFilePaths(fileTree).filter(path => !isLikelyBinaryFile(path));
-    
-    filePaths.sort();
-    
-    fetchAllFilesForMarkdown(filePaths);
-  };
-
-  const fetchAllFilesForMarkdown = async (filePaths: string[]) => {
-    if (!repoData) return;
-    
-    const allFiles: AllFilesContent = {};
-    
-    try {
-      await Promise.all(
-        filePaths.map(async (path) => {
-          try {
-            const content = await getFileContent(repoData, path, repoData.branch);
-            allFiles[path] = content;
-          } catch (error) {
-            console.error(`Error fetching ${path}:`, error);
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            allFiles[path] = `// Error fetching file: ${errorMsg}`;
-          }
-        })
-      );
-
-      if (Object.keys(allFiles).length === 0) {
-        setHasError(true);
-        setErrorMessage("ファイルを読み込めませんでした。URLを確認するか、別のリポジトリを試してください。");
-        toast.error("ファイルを読み込めませんでした。");
-      } else {
-        setAllFilesContent(allFiles);
-        toast.success(`${Object.keys(allFiles).length}個のファイルを読み込みました`);
-      }
-    } catch (error) {
-      console.error("Error fetching all files:", error);
-      setHasError(true);
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("すべてのファイルを取得できませんでした。");
-      }
-      toast.error("すべてのファイルを取得できませんでした。");
-    } finally {
-      setIsLoadingAllFiles(false);
-    }
+    fetchAllFiles();
   };
 
   const copyToClipboard = () => {
@@ -325,6 +287,11 @@ const Index = () => {
       setFileTree(root);
       
       toast.success("リポジトリデータを取得しました。");
+      
+      // Automatically fetch all files when repository is loaded
+      setTimeout(() => {
+        fetchAllFiles();
+      }, 500);
     } catch (error) {
       console.error("Error fetching repo data:", error);
       
