@@ -1,11 +1,11 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import RepoForm from "@/components/RepoForm";
 import FileTree from "@/components/FileTree";
 import IgnorePatterns from "@/components/IgnorePatterns";
 import { FileNode, buildFileTree } from "@/lib/github/fileUtils";
-import { getDefaultBranch, getRepoTree, parseRepoUrl } from "@/lib/github/api";
+import { getDefaultBranch, getRepoTree, parseRepoUrl, clearApiCache } from "@/lib/github/api";
 import { getFileContent } from "@/lib/github/api";
 import { isLikelyBinaryFile } from "@/lib/github/fileUtils";
 import ReactMarkdown from 'react-markdown';
@@ -13,8 +13,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { getFileIconClass } from "@/lib/github/fileUtils";
-import { FileText, FolderTree, List, Clipboard, Download, Sun, Moon } from "lucide-react";
+import { FileText, FolderTree, List, Clipboard, Download, Sun, Moon, RefreshCw } from "lucide-react";
 
 interface RepoData {
   url: string;
@@ -39,6 +38,8 @@ const Index = () => {
   const [allFilesContent, setAllFilesContent] = useState<AllFilesContent>({});
   const [isLoadingAllFiles, setIsLoadingAllFiles] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   // Toggle dark mode
   const toggleDarkMode = () => {
@@ -50,6 +51,8 @@ const Index = () => {
     setSelectedFile(filePath);
     setMarkdownOutput("");
     setViewMode('single');
+    setHasError(false);
+    setErrorMessage("");
     
     if (!repoData) {
       toast.error("リポジトリデータがありません。");
@@ -93,17 +96,11 @@ const Index = () => {
       let errorMessage = "ファイルコンテンツの取得に失敗しました。";
       
       if (error instanceof Error) {
-        errorMessage += ` ${error.message}`;
-        
-        if (error.message.includes("404")) {
-          errorMessage = "ファイルが見つかりませんでした。";
-        }
-        
-        if (error.message.includes("401") || error.message.includes("403")) {
-          errorMessage = "アクセス権限がありません。";
-        }
+        errorMessage = error.message;
       }
       
+      setHasError(true);
+      setErrorMessage(errorMessage);
       toast.error(errorMessage);
     }
   };
@@ -116,6 +113,8 @@ const Index = () => {
 
     setIsLoadingAllFiles(true);
     setViewMode('all');
+    setHasError(false);
+    setErrorMessage("");
     const allFiles: AllFilesContent = {};
 
     // Helper function to recursively get all file paths
@@ -145,16 +144,29 @@ const Index = () => {
               allFiles[path] = content;
             } catch (error) {
               console.error(`Error fetching ${path}:`, error);
-              allFiles[path] = `// Error fetching file: ${error instanceof Error ? error.message : 'Unknown error'}`;
+              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+              allFiles[path] = `// Error fetching file: ${errorMsg}`;
             }
           }
         })
       );
 
-      setAllFilesContent(allFiles);
-      toast.success(`${Object.keys(allFiles).length}個のファイルを読み込みました`);
+      if (Object.keys(allFiles).length === 0) {
+        setHasError(true);
+        setErrorMessage("ファイルを読み込めませんでした。URLを確認するか、別のリポジトリを試してください。");
+        toast.error("ファイルを読み込めませんでした。");
+      } else {
+        setAllFilesContent(allFiles);
+        toast.success(`${Object.keys(allFiles).length}個のファイルを読み込みました`);
+      }
     } catch (error) {
       console.error("Error fetching all files:", error);
+      setHasError(true);
+      if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage("すべてのファイルを取得できませんでした。");
+      }
       toast.error("すべてのファイルを取得できませんでした。");
     } finally {
       setIsLoadingAllFiles(false);
@@ -169,6 +181,8 @@ const Index = () => {
 
     setIsLoadingAllFiles(true);
     setViewMode('all');
+    setHasError(false);
+    setErrorMessage("");
     
     // Helper function to recursively get all file paths
     const getAllFilePaths = (node: FileNode): string[] => {
@@ -207,15 +221,28 @@ const Index = () => {
             allFiles[path] = content;
           } catch (error) {
             console.error(`Error fetching ${path}:`, error);
-            allFiles[path] = `// Error fetching file: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            allFiles[path] = `// Error fetching file: ${errorMsg}`;
           }
         })
       );
 
-      setAllFilesContent(allFiles);
-      toast.success(`${Object.keys(allFiles).length}個のファイルを読み込みました`);
+      if (Object.keys(allFiles).length === 0) {
+        setHasError(true);
+        setErrorMessage("ファイルを読み込めませんでした。URLを確認するか、別のリポジトリを試してください。");
+        toast.error("ファイルを読み込めませんでした。");
+      } else {
+        setAllFilesContent(allFiles);
+        toast.success(`${Object.keys(allFiles).length}個のファイルを読み込みました`);
+      }
     } catch (error) {
       console.error("Error fetching all files:", error);
+      setHasError(true);
+      if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage("すべてのファイルを取得できませんでした。");
+      }
       toast.error("すべてのファイルを取得できませんでした。");
     } finally {
       setIsLoadingAllFiles(false);
@@ -264,6 +291,11 @@ const Index = () => {
     toast.success("マークダウンとしてダウンロードしました");
   };
 
+  const clearCache = () => {
+    clearApiCache();
+    toast.success("キャッシュをクリアしました");
+  };
+
   const fetchRepoData = async (repoUrl: string, maxDepth: number, ignorePatterns: string[]) => {
     setIsLoading(true);
     setRepoData(null);
@@ -273,6 +305,8 @@ const Index = () => {
     setIgnorePatterns(ignorePatterns);
     setViewMode('single');
     setAllFilesContent({});
+    setHasError(false);
+    setErrorMessage("");
     
     try {
       console.info("Fetching repo data:", { repoUrl, ignorePatterns, maxDepth });
@@ -310,24 +344,11 @@ const Index = () => {
       
       if (error instanceof Error) {
         // エラーの詳細情報を追加
-        errorMessage += ` ${error.message}`;
-        
-        // 404エラーの特別なケース
-        if (error.message.includes("404")) {
-          errorMessage = "リポジトリが見つかりませんでした。URLが正しいか確認してください。";
-        }
-        
-        // 認証エラーの特別なケース
-        if (error.message.includes("401") || error.message.includes("403")) {
-          errorMessage = "アクセス権限がありません。プライベートリポジトリの場合は認証が必要です。";
-        }
-        
-        // レート制限エラーの特別なケース
-        if (error.message.includes("rate limit")) {
-          errorMessage = "GitHub APIのレート制限に達しました。しばらく待ってから再試行してください。";
-        }
+        errorMessage = error.message;
       }
       
+      setHasError(true);
+      setErrorMessage(errorMessage);
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -339,16 +360,39 @@ const Index = () => {
       <div className="container mx-auto py-6 px-4">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold mb-6">GitHub リポジトリエクスプローラー</h1>
-          <button
-            onClick={toggleDarkMode}
-            className="p-2 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
-            aria-label={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          >
-            {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearCache}
+              className="p-2 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+              aria-label="Clear Cache"
+              title="キャッシュをクリア"
+            >
+              <RefreshCw className="h-5 w-5" />
+            </button>
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+              aria-label={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
         
         <RepoForm onSubmit={fetchRepoData} isLoading={isLoading} />
+        
+        {hasError && !fileTree && (
+          <div className="mt-8 p-6 border border-destructive/50 bg-destructive/10 rounded-lg">
+            <h2 className="text-xl font-semibold text-destructive mb-2">エラーが発生しました</h2>
+            <p className="text-destructive/90">{errorMessage}</p>
+            <div className="mt-4">
+              <p className="text-sm">
+                GitHub APIのレート制限に達した場合は、GitHubの個人アクセストークンを使用すると制限を上げられます。
+                環境変数 <code className="bg-muted px-1 py-0.5 rounded">VITE_GITHUB_TOKEN</code> にトークンを設定してください。
+              </p>
+            </div>
+          </div>
+        )}
         
         {fileTree && (
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -427,6 +471,22 @@ const Index = () => {
                   <div className="flex flex-col items-center justify-center space-y-4">
                     <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full"></div>
                     <p>ファイルを読み込み中...</p>
+                  </div>
+                </div>
+              ) : hasError ? (
+                <div className="bg-destructive/10 border border-destructive/50 rounded-lg p-6 animate-fade-in">
+                  <div className="flex flex-col items-center justify-center space-y-4 text-destructive">
+                    <FolderTree size={48} className="opacity-70" />
+                    <p className="text-center font-medium">{errorMessage}</p>
+                    {errorMessage.includes('レート制限') && (
+                      <div className="text-sm text-center max-w-md">
+                        <p className="mb-2">GitHub APIのレート制限に達しました。以下の方法で解決できます：</p>
+                        <ol className="list-decimal text-left ml-6 space-y-1">
+                          <li>しばらく待ってから再試行する</li>
+                          <li>GitHubの個人アクセストークンを使用する（環境変数 <code className="bg-muted px-1 py-0.5 rounded">VITE_GITHUB_TOKEN</code> に設定）</li>
+                        </ol>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : viewMode === 'single' ? (

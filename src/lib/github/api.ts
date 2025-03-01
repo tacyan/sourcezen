@@ -49,6 +49,15 @@ interface TreeItem {
   url: string;
 }
 
+// Cache for API responses to reduce GitHub API calls
+const apiCache: Record<string, {
+  data: any;
+  timestamp: number;
+}> = {};
+
+// Cache expiration time (10 minutes)
+const CACHE_EXPIRATION = 10 * 60 * 1000;
+
 /**
  * Parses a GitHub repository URL to extract owner and repo name
  * 
@@ -91,6 +100,12 @@ export function parseRepoUrl(url: string): RepoInfo | null {
  * @returns Response from GitHub API
  */
 async function fetchGitHubApi(url: string): Promise<any> {
+  // Check cache first
+  if (apiCache[url] && Date.now() - apiCache[url].timestamp < CACHE_EXPIRATION) {
+    console.log("Using cached data for:", url);
+    return apiCache[url].data;
+  }
+
   const headers: HeadersInit = {
     'Accept': 'application/vnd.github.v3+json',
   };
@@ -105,10 +120,34 @@ async function fetchGitHubApi(url: string): Promise<any> {
   const response = await fetch(url, { headers });
   
   if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    // More detailed error handling
+    let errorMessage = `GitHub API error: ${response.status} ${response.statusText}`;
+    
+    // Specific error messages based on status code
+    if (response.status === 404) {
+      errorMessage = `リポジトリまたはファイルが見つかりません (404)。URLを確認してください。`;
+    } else if (response.status === 403) {
+      const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
+      if (rateLimitRemaining === '0') {
+        errorMessage = `GitHub APIのレート制限に達しました (403)。環境変数 'VITE_GITHUB_TOKEN' に個人アクセストークンを設定することで制限を上げられます。`;
+      } else {
+        errorMessage = `アクセス権限がありません (403)。プライベートリポジトリには認証が必要です。`;
+      }
+    } else if (response.status === 401) {
+      errorMessage = `認証エラー (401)。GitHubトークンが無効または期限切れです。`;
+    }
+
+    throw new Error(errorMessage);
   }
   
-  return response.json();
+  // Cache the successful response
+  const data = await response.json();
+  apiCache[url] = {
+    data,
+    timestamp: Date.now()
+  };
+  
+  return data;
 }
 
 /**
@@ -178,13 +217,38 @@ export async function getRepoTree(repoInfo: RepoInfo, branch: string): Promise<T
  * @returns File content
  */
 export async function getFileContent(repoInfo: RepoInfo, filePath: string, branch: string): Promise<string> {
+  // Create a cache key specific to this file
+  const cacheKey = `${repoInfo.owner}/${repoInfo.repo}/${branch}/${filePath}`;
+  
+  // Check cache first
+  if (apiCache[cacheKey] && Date.now() - apiCache[cacheKey].timestamp < CACHE_EXPIRATION) {
+    console.log("Using cached file content for:", filePath);
+    return apiCache[cacheKey].data;
+  }
+  
   const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/contents/${filePath}?ref=${branch}`;
   const data = await fetchGitHubApi(url);
   
   // GitHub API returns base64-encoded content
+  let content = '';
   if (data.encoding === 'base64' && data.content) {
-    return atob(data.content.replace(/\n/g, ''));
+    content = atob(data.content.replace(/\n/g, ''));
+    
+    // Cache the decoded content
+    apiCache[cacheKey] = {
+      data: content,
+      timestamp: Date.now()
+    };
   }
   
-  return data;
+  return content;
+}
+
+/**
+ * Clears the API cache
+ */
+export function clearApiCache(): void {
+  Object.keys(apiCache).forEach(key => {
+    delete apiCache[key];
+  });
 }
