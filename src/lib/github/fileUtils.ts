@@ -1,3 +1,4 @@
+
 /**
  * File utility functions
  * 
@@ -144,6 +145,15 @@ export function buildFileTree(
         path: item.path,
         type: 'file'
       });
+    }
+  }
+  
+  // Clean up the tree if there's only one folder at the root level
+  if (root.children?.length === 1 && root.children[0].type === 'directory') {
+    const singleDir = root.children[0];
+    // If it's a special folder like .github, don't promote it
+    if (!singleDir.name.startsWith('.')) {
+      return singleDir;
     }
   }
   

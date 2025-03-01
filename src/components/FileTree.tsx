@@ -14,14 +14,16 @@ const FileTreeNode = ({
   node, 
   depth = 0, 
   onSelect,
-  selectedFile
+  selectedFile,
+  isRoot = false
 }: { 
   node: FileNode; 
   depth?: number; 
   onSelect?: (filePath: string) => void;
   selectedFile: string | null;
+  isRoot?: boolean;
 }) => {
-  const [isOpen, setIsOpen] = useState(depth < 1);
+  const [isOpen, setIsOpen] = useState(depth < 1 || isRoot);
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedFile === node.path;
   
@@ -33,6 +35,8 @@ const FileTreeNode = ({
   const handleClick = () => {
     if (node.type === 'file' && onSelect && node.path) {
       onSelect(node.path);
+    } else if (hasChildren) {
+      setIsOpen(!isOpen);
     }
   };
   
@@ -54,6 +58,32 @@ const FileTreeNode = ({
       return <File className="text-gray-500" size={16} />;
     }
   };
+  
+  // Skip rendering empty root node with no name
+  if (isRoot && !node.name && hasChildren) {
+    return (
+      <div className="file-tree-root">
+        {node.children
+          ?.sort((a, b) => {
+            // Directories first, then files
+            if (a.type !== b.type) {
+              return a.type === 'directory' ? -1 : 1;
+            }
+            // Alphabetical within the same type
+            return a.name.localeCompare(b.name);
+          })
+          .map((child, index) => (
+            <FileTreeNode 
+              key={`${child.path}-${index}`} 
+              node={child} 
+              depth={depth}
+              onSelect={onSelect}
+              selectedFile={selectedFile}
+            />
+          ))}
+      </div>
+    );
+  }
   
   return (
     <div>
@@ -83,7 +113,7 @@ const FileTreeNode = ({
           )}
         </span>
         
-        <span className="truncate">{node.name || 'root'}</span>
+        <span className="truncate font-medium">{node.name || 'root'}</span>
       </div>
       
       {hasChildren && isOpen && (
@@ -114,12 +144,13 @@ const FileTreeNode = ({
 
 const FileTree = ({ tree, onSelect, selectedFile, maxDepth = -1 }: FileTreeProps) => {
   return (
-    <div className="file-tree glass-panel p-4 animate-fade-in">
+    <div className="file-tree glass-panel p-4 rounded-lg shadow-md animate-fade-in">
       <div className="text-sm">
         <FileTreeNode 
           node={tree} 
           onSelect={onSelect} 
           selectedFile={selectedFile}
+          isRoot={true}
         />
       </div>
     </div>

@@ -14,12 +14,17 @@ import rehypeRaw from 'rehype-raw';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { getFileIconClass } from "@/lib/github/fileUtils";
+import { FileText, FolderTree, List, Clipboard, Download } from "lucide-react";
 
 interface RepoData {
   url: string;
   owner: string;
   repo: string;
   branch: string;
+}
+
+interface AllFilesContent {
+  [path: string]: string;
 }
 
 const Index = () => {
@@ -30,10 +35,14 @@ const Index = () => {
   const [markdownOutput, setMarkdownOutput] = useState<string>("");
   const [ignorePatterns, setIgnorePatterns] = useState<string[]>([]);
   const [sourceIgnorePatterns, setSourceIgnorePatterns] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
+  const [allFilesContent, setAllFilesContent] = useState<AllFilesContent>({});
+  const [isLoadingAllFiles, setIsLoadingAllFiles] = useState(false);
 
   const handleFileSelect = async (filePath: string) => {
     setSelectedFile(filePath);
     setMarkdownOutput("");
+    setViewMode('single');
     
     if (!repoData) {
       toast.error("リポジトリデータがありません。");
@@ -55,7 +64,6 @@ const Index = () => {
       }
       
       // Generate documentation markup for the file
-      // Since generateMarkdownDocumentation doesn't exist, we'll create a simple documentation
       let output = `# ${filePath}\n\n`;
       output += "```\n";
       output += fileContent;
@@ -71,7 +79,7 @@ const Index = () => {
       }
       
       setMarkdownOutput(output);
-      toast.success("ドキュメントを生成しました。");
+      toast.success("ファイルを読み込みました");
     } catch (error) {
       console.error("Error fetching file content:", error);
       
@@ -93,6 +101,100 @@ const Index = () => {
     }
   };
 
+  const fetchAllFiles = async () => {
+    if (!repoData || !fileTree) {
+      toast.error("リポジトリデータがありません。");
+      return;
+    }
+
+    setIsLoadingAllFiles(true);
+    setViewMode('all');
+    const allFiles: AllFilesContent = {};
+
+    // Helper function to recursively get all file paths
+    const getAllFilePaths = (node: FileNode): string[] => {
+      const paths: string[] = [];
+      if (node.type === 'file' && node.path) {
+        return [node.path];
+      }
+      if (node.children) {
+        for (const child of node.children) {
+          paths.push(...getAllFilePaths(child));
+        }
+      }
+      return paths;
+    };
+
+    const filePaths = getAllFilePaths(fileTree);
+    
+    try {
+      // Use Promise.all to fetch all files in parallel
+      await Promise.all(
+        filePaths.map(async (path) => {
+          if (!isLikelyBinaryFile(path)) {
+            try {
+              const content = await getFileContent(repoData, path, repoData.branch);
+              allFiles[path] = content;
+            } catch (error) {
+              console.error(`Error fetching ${path}:`, error);
+              allFiles[path] = `// Error fetching file: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            }
+          }
+        })
+      );
+
+      setAllFilesContent(allFiles);
+      toast.success(`${Object.keys(allFiles).length}個のファイルを読み込みました`);
+    } catch (error) {
+      console.error("Error fetching all files:", error);
+      toast.error("すべてのファイルを取得できませんでした。");
+    } finally {
+      setIsLoadingAllFiles(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (viewMode === 'single' && markdownOutput) {
+      navigator.clipboard.writeText(markdownOutput)
+        .then(() => toast.success("コードをクリップボードにコピーしました"))
+        .catch(() => toast.error("コピーに失敗しました"));
+    } else if (viewMode === 'all') {
+      const allFilesText = Object.entries(allFilesContent)
+        .map(([path, content]) => `# ${path}\n\n\`\`\`\n${content}\n\`\`\`\n\n`)
+        .join('\n---\n\n');
+      
+      navigator.clipboard.writeText(allFilesText)
+        .then(() => toast.success("すべてのファイルをクリップボードにコピーしました"))
+        .catch(() => toast.error("コピーに失敗しました"));
+    }
+  };
+
+  const downloadAsMarkdown = () => {
+    let content = '';
+    let filename = '';
+    
+    if (viewMode === 'single' && markdownOutput) {
+      content = markdownOutput;
+      filename = `${selectedFile?.split('/').pop() || 'file'}.md`;
+    } else if (viewMode === 'all') {
+      content = Object.entries(allFilesContent)
+        .map(([path, fileContent]) => `# ${path}\n\n\`\`\`\n${fileContent}\n\`\`\`\n\n`)
+        .join('\n---\n\n');
+      filename = `${repoData?.repo || 'repository'}_files.md`;
+    }
+    
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("マークダウンとしてダウンロードしました");
+  };
+
   const fetchRepoData = async (repoUrl: string, maxDepth: number, ignorePatterns: string[]) => {
     setIsLoading(true);
     setRepoData(null);
@@ -100,6 +202,8 @@ const Index = () => {
     setSelectedFile(null);
     setMarkdownOutput("");
     setIgnorePatterns(ignorePatterns);
+    setViewMode('single');
+    setAllFilesContent({});
     
     try {
       console.info("Fetching repo data:", { repoUrl, ignorePatterns, maxDepth });
@@ -163,14 +267,29 @@ const Index = () => {
 
   return (
     <div className="container mx-auto py-6 px-4">
-      <h1 className="text-3xl font-bold mb-6">GitHub Docs Generator</h1>
+      <h1 className="text-3xl font-bold mb-6">GitHub リポジトリエクスプローラー</h1>
       
       <RepoForm onSubmit={fetchRepoData} isLoading={isLoading} />
       
       {fileTree && (
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
-            <h2 className="text-xl font-semibold mb-4">ファイル構成</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">ファイル構成</h2>
+              {repoData && (
+                <div className="flex space-x-2">
+                  <button 
+                    className="p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
+                    onClick={fetchAllFiles}
+                    disabled={isLoadingAllFiles}
+                    title="すべてのファイルを読み込み"
+                  >
+                    <List size={18} />
+                  </button>
+                </div>
+              )}
+            </div>
+            
             <FileTree 
               tree={fileTree} 
               onSelect={handleFileSelect} 
@@ -189,40 +308,103 @@ const Index = () => {
           </div>
           
           <div className="lg:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">ドキュメント出力</h2>
-            {markdownOutput ? (
-              <div className="glass-panel p-6 markdown-output animate-fade-in">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeRaw]}
-                  components={{
-                    code({ className, children, ...props }) {
-                      const match = (className || '').match(/language-(?<lang>.*)/);
-                      return match ? (
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">
+                {viewMode === 'single' ? 'ファイル内容' : 'すべてのファイル'}
+              </h2>
+              
+              {(markdownOutput || Object.keys(allFilesContent).length > 0) && (
+                <div className="flex space-x-3">
+                  <button 
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
+                    onClick={copyToClipboard}
+                    title="コピー"
+                  >
+                    <Clipboard size={16} />
+                    <span>コピー</span>
+                  </button>
+                  <button 
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
+                    onClick={downloadAsMarkdown}
+                    title="ダウンロード"
+                  >
+                    <Download size={16} />
+                    <span>ダウンロード</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {isLoadingAllFiles ? (
+              <div className="glass-panel p-6 text-center animate-fade-in">
+                <div className="flex flex-col items-center justify-center space-y-4">
+                  <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full"></div>
+                  <p>ファイルを読み込み中...</p>
+                </div>
+              </div>
+            ) : viewMode === 'single' ? (
+              markdownOutput ? (
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 markdown-output animate-fade-in overflow-auto max-h-[80vh]">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
+                    components={{
+                      code({ className, children, ...props }) {
+                        const match = (className || '').match(/language-(?<lang>.*)/);
+                        return match ? (
+                          <SyntaxHighlighter
+                            style={dracula}
+                            language={match.groups?.lang}
+                            PreTag="div"
+                            {...props}
+                          >
+                            {String(children).replace(/\n$/, '')}
+                          </SyntaxHighlighter>
+                        ) : (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        );
+                      }
+                    }}
+                  >
+                    {markdownOutput}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="glass-panel p-6 text-center animate-fade-in">
+                  <div className="flex flex-col items-center justify-center space-y-4 text-muted-foreground">
+                    <FileText size={48} className="opacity-50" />
+                    <p>ファイルを選択するとコンテンツが表示されます</p>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in overflow-auto max-h-[80vh]">
+                {Object.keys(allFilesContent).length > 0 ? (
+                  <div className="space-y-8">
+                    {Object.entries(allFilesContent).map(([path, content]) => (
+                      <div key={path} className="pb-6 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                        <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                          <FileText size={16} className="text-primary" />
+                          {path}
+                        </h3>
                         <SyntaxHighlighter
                           style={dracula}
-                          language={match.groups?.lang}
-                          PreTag="div"
-                          {...props}
+                          language={path.split('.').pop()}
+                          customStyle={{ borderRadius: '0.5rem' }}
                         >
-                          {String(children).replace(/\n$/, '')}
+                          {content}
                         </SyntaxHighlighter>
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      );
-                    }
-                  }}
-                >
-                  {markdownOutput}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <div className="glass-panel p-6 text-center animate-fade-in">
-                <p className="text-muted-foreground">
-                  ファイルを選択するとドキュメントが生成されます
-                </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                    <FolderTree size={48} className="opacity-50 mb-4" />
+                    <p>ファイルが読み込まれていません</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
